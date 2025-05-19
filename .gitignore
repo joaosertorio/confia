@@ -1,0 +1,45 @@
+# Arquivo .gitignore para o projeto Co-Fin
+
+# Ambiente Virtual
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos de Build/Distribuição
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Arquivos do SQLite
+# Se o banco de dados for armazenado fora da pasta 'database' ou tiver um nome específico, adicione-o aqui.
+# Por exemplo, se o arquivo do banco de dados se chamar 'cofin_local.db' e estiver na raiz:
+# cofin_local.db
+# Se estiver dentro da pasta 'database' e você quiser versionar um schema inicial mas não os dados em si,
+# pode ser mais complexo e exigir scripts. Por ora, vamos assumir que o arquivo .db em 'database' não será ignorado
+# para que possa ser incluído no repositório se necessário para a configuração inicial.
+# Se for um arquivo de dados que muda constantemente e não deve ser versionado, adicione:
+# database/*.db
+# database/*.sqlite
+# database/*.sqlite3
+
+# Arquivos de configuração do VS Code
+.vscode/
+
+# Arquivos de sistema operacional
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Arquivos temporários
+*.tmp
+*.bak
+*.swpS
