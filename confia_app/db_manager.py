@@ -250,6 +250,175 @@ def delete_transaction(transaction_id: int):
     finally:
         if conn:
             conn.close()
+            
+def get_transaction_by_id(transaction_id: int):
+    """
+    Busca os detalhes de uma transação específica pelo seu ID.
+    Retorna um dicionário com os dados da transação ou None se não encontrada.
+    Os campos retornados são: id, data, descricao, valor, tipo, categoria_id, efetivada.
+    """
+    conn = connect_db()
+    # Configura a conexão para retornar linhas como dicionários (sqlite3.Row)
+    conn.row_factory = sqlite3.Row 
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, data, descricao, valor, tipo, categoria_id, efetivada FROM transacoes WHERE id = ?", 
+                       (transaction_id,))
+        transaction_row = cursor.fetchone() # Pega a primeira linha (deve ser única)
+        if transaction_row:
+            return dict(transaction_row) # Converte sqlite3.Row para um dicionário Python
+        else:
+            return None # Retorna None se nenhuma transação for encontrada com esse ID
+    except sqlite3.Error as e:
+        print(f"Erro ao buscar transação ID {transaction_id}: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def update_transaction(transaction_id: int, data: str, descricao: str, valor: float, categoria_id: int, efetivada: int):
+    """
+    Atualiza uma transação existente no banco de dados.
+    O tipo da transação não é alterado aqui (assume-se que um crédito permanece crédito).
+    Retorna True se a atualização for bem-sucedida, False caso contrário.
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE transacoes 
+            SET data = ?, descricao = ?, valor = ?, categoria_id = ?, efetivada = ?
+            WHERE id = ?
+        """, (data, descricao, valor, categoria_id, efetivada, transaction_id))
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            print(f"Transação ID {transaction_id} atualizada com sucesso.")
+            return True
+        else:
+            # Isso pode acontecer se a transação com o ID fornecido não existir.
+            print(f"Nenhuma transação atualizada para ID {transaction_id} (não encontrada).")
+            return False
+    except sqlite3.Error as e:
+        print(f"Erro ao atualizar transação ID {transaction_id}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+    print("\n--- Testando get_transaction_by_id e update_transaction ---")
+    # Pega o ID de uma transação existente para testar (ex: a primeira de crédito após as exclusões)
+    trans_creditos_para_teste_edicao = get_transactions('Crédito')
+    if trans_creditos_para_teste_edicao:
+        id_para_editar = trans_creditos_para_teste_edicao[0][0] # Pega o ID da primeira transação
+        desc_original = trans_creditos_para_teste_edicao[0][4] # Descrição original
+        
+        print(f"\nBuscando transação ID: {id_para_editar} para edição...")
+        trans_data = get_transaction_by_id(id_para_editar)
+        if trans_data:
+            print(f"Dados originais: {trans_data}")
+            
+            # Prepara novos dados para atualização
+            nova_data = trans_data['data'] # Mantém a data original ou altera: '2025-05-20'
+            nova_descricao = f"{desc_original} (Editado)"
+            novo_valor = trans_data['valor'] + 100.0 # Adiciona 100 ao valor
+            nova_categoria_id = trans_data['categoria_id'] # Mantém a categoria original ou busca outra
+            nova_efetivada = 1 # Mantém como efetivada
+
+            print(f"Tentando atualizar transação ID: {id_para_editar}...")
+            if update_transaction(id_para_editar, nova_data, nova_descricao, novo_valor, nova_categoria_id, nova_efetivada):
+                print("Atualização bem-sucedida.")
+                trans_atualizada = get_transaction_by_id(id_para_editar)
+                print(f"Dados atualizados: {trans_atualizada}")
+            else:
+                print("Falha na atualização.")
+        else:
+            print(f"Transação ID {id_para_editar} não encontrada para edição.")
+    else:
+        print("Nenhuma transação de crédito encontrada para testar a edição.")
+        
+def add_transaction(data: str, descricao: str, valor: float, tipo: str, categoria_id: int): # REMOVIDO 'efetivada'
+    """
+    Adiciona uma nova transação (crédito ou débito) ao banco de dados.
+    'descricao' corresponde à 'Observação' do usuário.
+    'efetivada' será sempre 1 (padrão da tabela) para novas transações via esta função.
+    Retorna True se a inserção for bem-sucedida, False caso contrário.
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        # O campo 'efetivada' usará seu valor padrão definido na tabela (DEFAULT 1)
+        cursor.execute("""
+            INSERT INTO transacoes (data, descricao, valor, tipo, categoria_id) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (data, descricao, valor, tipo, categoria_id)) # Campo 'efetivada' removido da query
+        conn.commit()
+        print(f"Transação '{descricao}' do tipo '{tipo}' adicionada com sucesso.")
+        return True
+    except sqlite3.Error as e:
+        print(f"Erro ao adicionar transação '{descricao}': {e}")
+        conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_transaction_by_id(transaction_id: int):
+    """
+    Busca os detalhes de uma transação específica pelo seu ID.
+    Retorna um dicionário com os dados da transação ou None se não encontrada.
+    Campos: id, data, descricao, valor, tipo, categoria_id. 'efetivada' não é mais necessário para edição.
+    """
+    conn = connect_db()
+    conn.row_factory = sqlite3.Row 
+    cursor = conn.cursor()
+    try:
+        # Removido 'efetivada' do SELECT, pois não será editado por enquanto
+        cursor.execute("SELECT id, data, descricao, valor, tipo, categoria_id FROM transacoes WHERE id = ?", 
+                       (transaction_id,))
+        transaction_row = cursor.fetchone()
+        if transaction_row:
+            return dict(transaction_row)
+        else:
+            return None
+    except sqlite3.Error as e:
+        print(f"Erro ao buscar transação ID {transaction_id}: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def update_transaction(transaction_id: int, data: str, descricao: str, valor: float, categoria_id: int): # REMOVIDO 'efetivada'
+    """
+    Atualiza uma transação existente no banco de dados.
+    'efetivada' não é mais atualizado por esta função.
+    Retorna True se a atualização for bem-sucedida, False caso contrário.
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        # O campo 'efetivada' não é alterado aqui.
+        cursor.execute("""
+            UPDATE transacoes 
+            SET data = ?, descricao = ?, valor = ?, categoria_id = ?
+            WHERE id = ?
+        """, (data, descricao, valor, categoria_id, transaction_id)) # 'efetivada' removido do SET
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            print(f"Transação ID {transaction_id} atualizada com sucesso.")
+            return True
+        else:
+            print(f"Nenhuma transação atualizada para ID {transaction_id} (não encontrada).")
+            return False
+    except sqlite3.Error as e:
+        print(f"Erro ao atualizar transação ID {transaction_id}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
 
 if __name__ == '__main__':
     db_file_path = DATABASE_PATH
