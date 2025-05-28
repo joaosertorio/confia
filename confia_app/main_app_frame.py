@@ -7,11 +7,8 @@ import db_manager
 import os
 
 # --- CLASSES DE DIÁLOGO ---
-# (AddEditCreditDialog, AddEditDebitDialog, AddEditCardDialog, UpsertInvoiceDialog)
-# Certifique-se que as definições completas destas classes (como na sua última versão funcional - Passo 64)
-# estejam aqui. UpsertInvoiceDialog será ajustada para o modo de edição.
 
-class AddEditCreditDialog(ctk.CTkToplevel): # Como no Passo 64
+class AddEditCreditDialog(ctk.CTkToplevel):
     def __init__(self, master, refresh_callback, transaction_data=None):
         super().__init__(master)
         self.refresh_callback = refresh_callback
@@ -70,16 +67,16 @@ class AddEditCreditDialog(ctk.CTkToplevel): # Como no Passo 64
         if cat_nome.startswith("Nenhuma categoria"):messagebox.showerror("Erro","Selecione Categoria.",parent=self);return
         cat_id=self.categories_map.get(cat_nome)
         if cat_id is None:messagebox.showerror("Erro","ID categoria não encontrado para: "+cat_nome,parent=self);return
+        success = False
         if self.editing_transaction_id:
-            if db_manager.update_transaction(self.editing_transaction_id,data_str,obs,v,cat_id): 
-                messagebox.showinfo("Sucesso","Crédito atualizado!",parent=self.master);self.refresh_callback();self.destroy()
+            if db_manager.update_transaction(self.editing_transaction_id,data_str,obs,v,cat_id): success = True
             else:messagebox.showerror("Erro","Não foi possível atualizar o crédito.",parent=self)
         else:
-            if db_manager.add_transaction(data_str,obs,v,'Crédito',cat_id): 
-                messagebox.showinfo("Sucesso","Crédito adicionado!",parent=self.master);self.refresh_callback();self.destroy()
+            if db_manager.add_transaction(data_str,obs,v,'Crédito',cat_id): success = True
             else:messagebox.showerror("Erro","Não foi possível adicionar o crédito.",parent=self)
+        if success: messagebox.showinfo("Sucesso","Crédito salvo!",parent=self.master);self.refresh_callback();self.destroy()
 
-class AddEditDebitDialog(ctk.CTkToplevel): # Como no Passo 64
+class AddEditDebitDialog(ctk.CTkToplevel):
     def __init__(self, master, refresh_callback, transaction_data=None):
         super().__init__(master); self.refresh_callback=refresh_callback; self.categories_map={}; self.editing_transaction_id=None
         if transaction_data: self.editing_transaction_id=transaction_data.get('id'); self.title("Editar Débito")
@@ -129,16 +126,16 @@ class AddEditDebitDialog(ctk.CTkToplevel): # Como no Passo 64
         if cn.startswith("Nenhuma"):messagebox.showerror("Erro","Selecione Categoria.",parent=self);return
         c_id=self.categories_map.get(cn)
         if c_id is None:messagebox.showerror("Erro","ID categoria não encontrado para: "+cn,parent=self);return
+        success = False
         if self.editing_transaction_id:
-            if db_manager.update_transaction(self.editing_transaction_id,d,o,v,c_id):
-                messagebox.showinfo("Sucesso","Débito atualizado!",parent=self.master);self.refresh_callback();self.destroy()
+            if db_manager.update_transaction(self.editing_transaction_id,d,o,v,c_id): success = True
             else:messagebox.showerror("Erro","Não foi possível atualizar o débito.",parent=self)
         else:
-            if db_manager.add_transaction(d,o,v,'Débito',c_id):
-                messagebox.showinfo("Sucesso","Débito adicionado!",parent=self.master);self.refresh_callback();self.destroy()
+            if db_manager.add_transaction(d,o,v,'Débito',c_id): success = True
             else:messagebox.showerror("Erro","Não foi possível adicionar o débito.",parent=self)
+        if success: messagebox.showinfo("Sucesso","Débito salvo!",parent=self.master);self.refresh_callback();self.destroy()
 
-class AddEditCardDialog(ctk.CTkToplevel): # Como no Passo 60
+class AddEditCardDialog(ctk.CTkToplevel):
     def __init__(self, master, controller, refresh_callback, card_data=None):
         super().__init__(master);self.controller=controller;self.refresh_callback=refresh_callback;self.editing_card_id=None
         self.card_color_map={"Azul Clássico":"#3B8ED0","Verde Esmeralda":"#2ECC71","Vermelho Rubi":"#E74C3C","Amarelo Solar":"#F1C40F","Laranja Vibrante":"#E67E22","Roxo Profundo":"#8E44AD","Cinza Grafite":"#34495E","Prata":"#BDC3C7","Turquesa":"#1ABC9C", "Preto":"#000000", "Branco":"#FFFFFF"}
@@ -175,75 +172,51 @@ class AddEditCardDialog(ctk.CTkToplevel): # Como no Passo 60
         if self.editing_card_id:
             curr=db_manager.get_card_by_id(self.editing_card_id)
             if curr:banco=curr.get('banco');limite=curr.get('limite');dia_f=curr.get('dia_fechamento');dia_v=curr.get('dia_vencimento')
-            if db_manager.update_card(self.editing_card_id,nome,bandeira,cor_hex,limite,dia_f,dia_v,banco):
+            if db_manager.update_card(self.editing_card_id,nome,bandeira=bandeira,cor=cor_hex,limite=limite,dia_fechamento=dia_f,dia_vencimento=dia_v,banco=banco):
                 messagebox.showinfo("Sucesso",f"Cartão '{nome}' atualizado!",parent=self.master); success_flag=True
             else:messagebox.showerror("Erro","Não foi possível atualizar o cartão.",parent=self)
         else:
-            new_id = db_manager.add_card(nome=nome,bandeira=bandeira,cor=cor_hex,limite=None,dia_fechamento=None,dia_vencimento=None,banco=None)
+            new_id = db_manager.add_card(nome=nome,bandeira=bandeira,cor=cor_hex,limite=limite,dia_fechamento=dia_f,dia_vencimento=dia_v,banco=banco)
             if new_id:
                 messagebox.showinfo("Sucesso",f"Cartão '{nome}' adicionado!",parent=self.master); success_flag=True
             else:messagebox.showerror("Erro","Não foi possível adicionar o cartão.",parent=self)
         if success_flag: self.refresh_callback(); self.destroy()
 
-# --- DIÁLOGO PARA ADICIONAR/EDITAR FATURA (UpsertInvoiceDialog) ---
-class UpsertInvoiceDialog(ctk.CTkToplevel): # Renomeado e adaptado de EditSingleInvoiceDialog
+class UpsertInvoiceDialog(ctk.CTkToplevel):
     def __init__(self, master, controller, refresh_callback, card_id, year, month=None, current_value=0.0, edit_mode=False):
         super().__init__(master)
-        self.controller = controller
-        self.refresh_callback = refresh_callback
-        self.card_id_to_affect = card_id 
-        self.year_to_affect = year
-        self.month_to_affect = month 
-        self.current_value = current_value
+        self.controller = controller; self.refresh_callback = refresh_callback
+        self.card_id_to_affect = card_id; self.year_to_affect = year
+        self.month_to_affect = month; self.current_value = current_value
         self.edit_mode = edit_mode 
-
-        self.cards_map = {} 
-        self.month_names_map = {"Janeiro":1, "Fevereiro":2, "Março":3, "Abril":4, "Maio":5, "Junho":6, 
-                                "Julho":7, "Agosto":8, "Setembro":9, "Outubro":10, "Novembro":11, "Dezembro":12}
+        self.month_names_map = {"Janeiro":1, "Fevereiro":2, "Março":3, "Abril":4, "Maio":5, "Junho":6, "Julho":7, "Agosto":8, "Setembro":9, "Outubro":10, "Novembro":11, "Dezembro":12}
         self.month_numbers_map = {v: k for k, v in self.month_names_map.items()}
-
         card_info = db_manager.get_card_by_id(self.card_id_to_affect)
         card_name_for_title = card_info.get('nome', f"ID {self.card_id_to_affect}") if card_info else f"ID {self.card_id_to_affect}"
-
         if self.edit_mode and self.month_to_affect:
             month_name_str = self.month_numbers_map.get(self.month_to_affect, f"Mês {self.month_to_affect}")
             self.title(f"Editar Fatura: {card_name_for_title} - {month_name_str}/{self.year_to_affect}")
-        else: # Modo Adicionar
-            self.title(f"Adicionar Fatura: {card_name_for_title}")
-
-        self.geometry("450x300") # Ajustado
-        self.resizable(False, False); self.transient(master); self.grab_set()
-
+        else: self.title(f"Adicionar Fatura: {card_name_for_title}")
+        self.geometry("450x350"); self.resizable(False, False); self.transient(master); self.grab_set()
         form_frame = ctk.CTkFrame(self, fg_color="transparent"); form_frame.pack(pady=20, padx=20, fill="both", expand=True)
         form_frame.grid_columnconfigure(1, weight=1)
-
-        # Cartão (Apenas Label, não editável no diálogo de fatura)
         ctk.CTkLabel(form_frame, text="Cartão:").grid(row=0, column=0, padx=5, pady=10, sticky="w")
         ctk.CTkLabel(form_frame, text=card_name_for_title).grid(row=0, column=1, padx=5, pady=10, sticky="ew")
-        
-        # Ano (Apenas Label, não editável no diálogo de fatura)
         ctk.CTkLabel(form_frame, text="Ano:").grid(row=1, column=0, padx=5, pady=10, sticky="w")
-        ctk.CTkLabel(form_frame, text=str(self.year_to_affect)).grid(row=1, column=1, padx=5, pady=10, sticky="ew")
-
-        # Mês (Dropdown para Adicionar, Label para Editar)
+        self.year_entry = ctk.CTkEntry(form_frame, placeholder_text="YYYY"); self.year_entry.grid(row=1, column=1, padx=5, pady=10, sticky="ew")
+        self.year_entry.insert(0, str(self.year_to_affect))
+        self.year_entry.configure(state="disabled" if self.edit_mode else "normal") 
         ctk.CTkLabel(form_frame, text="Mês:").grid(row=2, column=0, padx=5, pady=10, sticky="w")
         self.month_var = ctk.StringVar()
         month_display_names = list(self.month_names_map.keys())
-        
-        if self.edit_mode and self.month_to_affect:
-            default_month_name = self.month_numbers_map.get(self.month_to_affect)
-            self.month_var.set(default_month_name)
-            ctk.CTkLabel(form_frame, text=default_month_name).grid(row=2, column=1, padx=5, pady=10, sticky="ew")
-        else: # Modo Adicionar
-            self.month_var.set(month_display_names[date.today().month -1]) # Mês atual como padrão
-            self.month_menu = ctk.CTkOptionMenu(form_frame, variable=self.month_var, values=month_display_names)
-            self.month_menu.grid(row=2, column=1, padx=5, pady=10, sticky="ew")
-
-        # Valor da Fatura
+        default_month_name = self.month_numbers_map.get(self.month_to_affect) if self.edit_mode and self.month_to_affect else month_display_names[date.today().month -1]
+        self.month_var.set(default_month_name)
+        self.month_menu = ctk.CTkOptionMenu(form_frame, variable=self.month_var, values=month_display_names)
+        self.month_menu.grid(row=2, column=1, padx=5, pady=10, sticky="ew")
+        if self.edit_mode: self.month_menu.configure(state="disabled")
         ctk.CTkLabel(form_frame, text="Valor da Fatura (R$):").grid(row=3, column=0, padx=5, pady=10, sticky="w")
         self.value_entry = ctk.CTkEntry(form_frame, placeholder_text="Ex: 250.00"); self.value_entry.grid(row=3, column=1, padx=5, pady=10, sticky="ew")
         if self.edit_mode: self.value_entry.insert(0, f"{self.current_value:.2f}")
-        
         bf=ctk.CTkFrame(self,fg_color="transparent");bf.pack(pady=(20,20),padx=20,side="bottom",fill="x",anchor="e")
         ctk.CTkButton(bf,text="Salvar",command=self._save_action).pack(side="left",padx=(0,5))
         ctk.CTkButton(bf,text="Cancelar",command=self.destroy,fg_color="gray").pack(side="left")
@@ -251,21 +224,22 @@ class UpsertInvoiceDialog(ctk.CTkToplevel): # Renomeado e adaptado de EditSingle
         if self.edit_mode: self.value_entry.select_range(0,ctk.END)
 
     def _save_action(self):
-        year_to_save = self.year_to_affect # Ano é fixo no contexto do diálogo
+        card_id_final = self.card_id_to_affect 
+        year_str = self.year_entry.get()
         month_nome_selecionado = self.month_var.get()
-        month_to_save = self.month_names_map.get(month_nome_selecionado)
         val_str = self.value_entry.get().replace(",",".")
-
-        if month_to_save is None : messagebox.showerror("Erro","Mês inválido.",parent=self); return
-        if not val_str: messagebox.showerror("Erro","Valor é obrigatório.",parent=self); return
+        try: year_final = int(year_str)
+        except ValueError: messagebox.showerror("Erro", "Ano inválido.", parent=self); return
+        month_final = self.month_names_map.get(month_nome_selecionado)
+        if month_final is None : messagebox.showerror("Erro", "Mês inválido.", parent=self); return
+        if not val_str: messagebox.showerror("Erro", "Valor é obrigatório.", parent=self); return
         try: val_final = float(val_str)
-        except ValueError: messagebox.showerror("Erro","Valor da fatura inválido.",parent=self); return
-
-        if db_manager.upsert_fatura(self.card_id_to_affect, year_to_save, month_to_save, val_final):
-            messagebox.showinfo("Sucesso","Fatura salva!",parent=self.master)
-            self.refresh_callback(self.card_id_to_affect, year_to_save) 
-            self.destroy()
+        except ValueError: messagebox.showerror("Erro", "Valor da fatura inválido.", parent=self); return
+        success_flag = False
+        if db_manager.upsert_fatura(card_id_final,year_final,month_final,val_final):
+            messagebox.showinfo("Sucesso","Fatura salva!",parent=self.master); success_flag = True
         else: messagebox.showerror("Erro","Não foi possível salvar fatura.",parent=self)
+        if success_flag: self.refresh_callback(card_id_final,year_final); self.destroy()
 
 # --- CLASSE MAINAPPFRAME ---
 class MainAppFrame(ctk.CTkFrame):
@@ -273,23 +247,33 @@ class MainAppFrame(ctk.CTkFrame):
         super().__init__(parent, **kwargs)
         self.controller = controller
         self.configure(fg_color="transparent")
+        
+        print("DEBUG_MainAppFrame: __init__ - INÍCIO")
         self.dialog_add_edit_credit = None; self.dialog_add_edit_debit = None
         self.dialog_add_edit_card = None; self.dialog_upsert_invoice = None 
         self.selected_card_id = None; self.last_selected_card_row_frame = None 
-        self.card_row_default_fg_color = ("gray92", "gray18") 
+        
+        self.card_row_default_fg_color = ("gray92", "gray20") 
         self.card_row_selected_fg_color = ("#3B8ED0", "#1F6AA5") 
         self.year_tab_selected_color = ctk.ThemeManager.theme["CTkButton"]["fg_color"]
         self.year_tab_selected_hover_color = ctk.ThemeManager.theme["CTkButton"]["hover_color"]
         self.year_tab_unselected_color = ("gray75", "gray28") 
         self.year_tab_unselected_hover_color = ("gray70", "gray35")
+
         self.current_invoice_year = date.today().year 
-        self.selected_invoice_details = None # Para {card_id, year, month, value, cell_widget}
-        self.last_selected_invoice_cell_frame = None # Para destacar célula da fatura
-        self.invoice_cell_selected_fg_color = ("#DDEEFF", "#2A3B4D") # Cor de destaque para célula de fatura
+        self.selected_invoice_details = None 
+        self.last_selected_invoice_cell_frame = None 
+        self.invoice_cell_selected_border_color = self.card_row_selected_fg_color # Azul para borda de destaque
+        self.invoice_cell_default_border_color = ("gray75", "gray28") # Cor de borda sutil para células não selecionadas
+        # CORREÇÃO DO AttributeError:
+        self.invoice_cell_default_fg_color = ("#FFFFFF", "#333333") # Cor de fundo padrão para células de fatura
+
         self._setup_menu()
         self._create_tabs() 
+        print("DEBUG_MainAppFrame: __init__ - FIM")
 
-    def _setup_menu(self): # ... (sem alterações)
+    def _setup_menu(self):
+        # ... (Seu código _setup_menu como estava) ...
         menubar = tkinter.Menu(self.controller); menu_sistema = tkinter.Menu(menubar, tearoff=0)
         menu_sistema.add_command(label="Criar Novo Usuário", command=self._criar_novo_usuario)
         menu_sistema.add_command(label="Alterar Senha", command=self._alterar_senha)
@@ -305,37 +289,75 @@ class MainAppFrame(ctk.CTkFrame):
         menubar.add_cascade(label="Ajuda", menu=menu_ajuda)
         self.controller.config(menu=menubar)
 
-    def _create_tabs(self): # ... (sem alterações)
+    def _create_tabs(self):
+        print("DEBUG_TABS: _create_tabs - INÍCIO")
         self.tab_view = ctk.CTkTabview(self, corner_radius=10)
-        self.tab_view.configure(command=self._on_tab_change)
-        self.tab_view.pack(pady=10, padx=10, fill="both", expand=True)
-        self.tab_dashboard = self.tab_view.add("Dashboard")
-        self.tab_credits = self.tab_view.add("Créditos") 
-        self.tab_debits = self.tab_view.add("Débitos") 
-        self.tab_cards = self.tab_view.add("Cartões") 
-        self.tab_calculations = self.tab_view.add("Cálculos")
-        self.tab_reports = self.tab_view.add("Relatórios/Insights")
-        self._setup_dashboard_tab(self.tab_dashboard)
-        self._setup_credits_tab(self.tab_credits) 
-        self._setup_debits_tab(self.tab_debits)
-        self._setup_cards_tab(self.tab_cards) 
-        self._setup_calculations_tab(self.tab_calculations)
-        self._setup_reports_tab(self.tab_reports)
-        self.tab_view.set("Dashboard") 
+        self.tab_view.pack(pady=10, padx=10, fill="both", expand=True) # pack primeiro
 
-    def _on_tab_change(self): # ... (sem alterações)
-        selected_tab_name = self.tab_view.get()
-        if selected_tab_name == "Créditos" and hasattr(self, '_load_initial_credits_data'): self._load_initial_credits_data()
-        elif selected_tab_name == "Débitos" and hasattr(self, '_load_initial_debits_data'): self._load_initial_debits_data()
-        elif selected_tab_name == "Cartões" and hasattr(self, '_load_and_display_cards'): 
-            self._load_and_display_cards()
+        tab_names_and_setup_methods = [
+            ("Dashboard", self._setup_dashboard_tab),
+            ("Créditos", self._setup_credits_tab),
+            ("Débitos", self._setup_debits_tab),
+            ("Cartões", self._setup_cards_tab),
+            ("Cálculos", self._setup_calculations_tab),
+            ("Relatórios/Insights", self._setup_reports_tab)
+        ]
+
+        for name, setup_method in tab_names_and_setup_methods:
+            print(f"DEBUG_TABS: Adicionando e configurando aba {name}...")
+            tab = self.tab_view.add(name)
+            # Armazena a referência da aba se necessário (ex: self.tab_dashboard)
+            setattr(self, f"tab_{name.lower().replace('/','_').replace(' ','_')}", tab) 
+            if callable(setup_method):
+                setup_method(tab) # Chama o método de setup para popular a aba
+        
+        print("DEBUG_TABS: Definindo aba inicial para 'Dashboard' com set()...")
+        self.tab_view.set("Dashboard") 
+        
+        # Configura o comando de mudança de aba APÓS todas as abas serem criadas e a inicial definida
+        self.tab_view.configure(command=self._on_tab_change)
+        
+        # Força o carregamento da aba que foi definida como padrão
+        self._on_tab_change() 
+        print("DEBUG_TABS: _create_tabs - FIM")
+
+    def _on_tab_change(self):
+        selected_tab_name = self.tab_view.get() 
+        print(f"DEBUG: _on_tab_change - Aba selecionada: {selected_tab_name}")
+        if selected_tab_name == "Dashboard":
+             if hasattr(self, '_setup_dashboard_content_or_update'): self._setup_dashboard_content_or_update()
+        elif selected_tab_name == "Créditos":
+            if hasattr(self, '_load_initial_credits_data'): self._load_initial_credits_data()
+        elif selected_tab_name == "Débitos":
+            if hasattr(self, '_load_initial_debits_data'): self._load_initial_debits_data()
+        elif selected_tab_name == "Cartões": 
+            if hasattr(self, '_load_and_display_cards'): self._load_and_display_cards()
+            # Se nenhum cartão estiver selecionado após carregar, oculta painel direito
             if self.selected_card_id is None and hasattr(self, 'invoice_details_block_frame') and self.invoice_details_block_frame.winfo_ismapped():
                  self.invoice_details_block_frame.grid_remove()
+                 self._reset_invoice_selection_and_buttons() 
     
-    def _setup_dashboard_tab(self, tab): # ... (sem alterações)
-        ctk.CTkLabel(tab, text="Conteúdo do Dashboard Aqui").pack(pady=20, padx=20)
-    
-    def _setup_credits_tab(self, tab_credits): # ... (Layout estável, cores corrigidas)
+    def _setup_dashboard_tab(self, tab_dashboard): # ABA DASHBOARD SIMPLIFICADA PARA TESTE
+        print("DEBUG_DASH: _setup_dashboard_tab (SIMPLIFICADO) - INÍCIO")
+        for widget in tab_dashboard.winfo_children(): widget.destroy()
+        test_label = ctk.CTkLabel(
+            tab_dashboard, text="ABA DASHBOARD VISÍVEL!\n(Conteúdo Real Virá Depois)",
+            font=ctk.CTkFont(size=28, weight="bold"), fg_color="purple", text_color="white", corner_radius=10 )
+        test_label.pack(pady=50, padx=50, expand=True, fill="both")
+        print("DEBUG_DASH: _setup_dashboard_tab (SIMPLIFICADO) - Label de teste roxo adicionado.")
+
+    def _setup_dashboard_content_or_update(self, selected_year_value_for_cards=None): # Chamado por _on_tab_change para Dashboard
+        print("DEBUG_DASH: _setup_dashboard_content_or_update - Chamado.")
+        if hasattr(self, 'tab_dashboard'): 
+            for widget in self.tab_dashboard.winfo_children(): widget.destroy()
+            # Aqui virá a lógica de filtros e gráficos do Passo 73 quando formos implementar de fato
+            ctk.CTkLabel(self.tab_dashboard, text="Dashboard - Conteúdo Real (Filtros e Gráficos) em Preparação",
+                         font=ctk.CTkFont(size=18)).pack(pady=20, padx=20, expand=True, fill="both")
+            print("DEBUG_DASH: Placeholder de conteúdo do dashboard (filtros/gráficos) renderizado.")
+        else: print("DEBUG_DASH: ERRO - self.tab_dashboard não encontrado.")
+
+    # --- MÉTODOS DAS ABAS CRÉDITOS E DÉBITOS (COMO ESTAVAM NA VERSÃO ESTÁVEL) ---
+    def _setup_credits_tab(self, tab_credits):
         credits_main_frame = ctk.CTkFrame(tab_credits, fg_color="transparent"); credits_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
         filter_add_frame = ctk.CTkFrame(credits_main_frame); filter_add_frame.pack(fill="x", pady=(0,10), padx=5)
         ctk.CTkLabel(filter_add_frame, text="Data Inicial:").pack(side="left", padx=(5,0), pady=5)
@@ -353,7 +375,7 @@ class MainAppFrame(ctk.CTkFrame):
             ctk.CTkLabel(hcf,text=cfg["text"],font=ctk.CTkFont(weight="bold"),anchor=cfg["anchor"]).pack(padx=5,pady=5,fill="both",expand=True)
         ctk.CTkFrame(self.credits_table_grid_container,height=1,fg_color=("gray70","gray30")).grid(row=1,column=0,columnspan=len(self.credit_col_config),sticky="ew",pady=(0,5))
 
-    def _load_initial_credits_data(self): # ... (sem alterações)
+    def _load_initial_credits_data(self):
         today=date.today();som=today.replace(day=1)
         if som.month==12:eom=som.replace(year=som.year+1,month=1,day=1)-timedelta(days=1)
         else:eom=som.replace(month=som.month+1,day=1)-timedelta(days=1)
@@ -363,14 +385,14 @@ class MainAppFrame(ctk.CTkFrame):
             self.credits_end_date_entry.delete(0,ctk.END);self.credits_end_date_entry.insert(0,e)
         self._load_and_display_credits(s,e)
 
-    def _load_and_display_credits(self,start_date=None,end_date=None): # ... (cores corrigidas)
+    def _load_and_display_credits(self,start_date=None,end_date=None):
         for w in self.credits_table_grid_container.winfo_children():
             if w.grid_info().get("row",0)>=2:w.destroy()
         tx=db_manager.get_transactions('Crédito',start_date,end_date)
         if not tx:ctk.CTkLabel(self.credits_table_grid_container,text="Nenhum crédito encontrado.").grid(row=2,column=0,columnspan=len(self.credit_col_config),pady=10);return
         r=2
         for t_id,d,v,cat,o in tx:
-            fg=("gray98","gray22") if r%2==0 else ("gray92","gray18") 
+            fg=("gray98","gray22") if r%2==0 else ("gray92","gray18")
             details=[(d,0),(f"R$ {v:.2f}",1),(cat,2),(o,3)]
             for col,(txt,c_idx) in enumerate(details):
                 cf=ctk.CTkFrame(self.credits_table_grid_container,fg_color=fg,corner_radius=0);cf.grid(row=r,column=col,sticky="nsew")
@@ -381,28 +403,28 @@ class MainAppFrame(ctk.CTkFrame):
             ctk.CTkButton(acf,text="✎",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id:self._on_edit_credit_button_click(i)).grid(row=0,column=0,padx=(0,2),pady=2,sticky="e")
             ctk.CTkButton(acf,text="✕",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id,d_txt=o:self._confirm_delete_credit(i,d_txt)).grid(row=0,column=1,padx=(2,0),pady=2,sticky="w")
             r+=1
-
-    def _on_filter_credits_button_click(self): # ... (sem alterações)
+            
+    def _on_filter_credits_button_click(self):
         s,e=self.credits_start_date_entry.get(),self.credits_end_date_entry.get()
         try:datetime.strptime(s,"%Y-%m-%d");datetime.strptime(e,"%Y-%m-%d")
         except ValueError:messagebox.showerror("Erro","Data inválida.",parent=self.controller);return
         self._load_and_display_credits(s,e)
-    def _on_add_credit_button_click(self): # ... (sem alterações)
+    def _on_add_credit_button_click(self):
         if hasattr(self,'dialog_add_edit_credit') and self.dialog_add_edit_credit and self.dialog_add_edit_credit.winfo_exists():self.dialog_add_edit_credit.focus();return
         self.dialog_add_edit_credit=AddEditCreditDialog(self.controller,self._on_filter_credits_button_click,None)
-    def _on_edit_credit_button_click(self,transaction_id): # ... (sem alterações)
+    def _on_edit_credit_button_click(self,transaction_id):
         data=db_manager.get_transaction_by_id(transaction_id)
         if data:
             if hasattr(self,'dialog_add_edit_credit') and self.dialog_add_edit_credit and self.dialog_add_edit_credit.winfo_exists():self.dialog_add_edit_credit.focus();return
             self.dialog_add_edit_credit=AddEditCreditDialog(self.controller,self._on_filter_credits_button_click,data)
         else:messagebox.showerror("Erro",f"ID {transaction_id} não encontrado.",parent=self.controller)
-    def _confirm_delete_credit(self,transaction_id,desc): # ... (sem alterações)
+    def _confirm_delete_credit(self,transaction_id,desc):
         d=(desc[:30]+'...') if len(desc)>30 else desc
         if messagebox.askyesno("Confirmar",f"Excluir crédito:\n'{d}'?",parent=self.controller):
             if db_manager.delete_transaction(transaction_id):messagebox.showinfo("Sucesso","Crédito excluído.",parent=self.controller);self._on_filter_credits_button_click()
             else:messagebox.showerror("Erro","Não foi possível excluir.",parent=self.controller)
 
-    def _setup_debits_tab(self, tab_debits): # ... (Restaurado e cores corrigidas)
+    def _setup_debits_tab(self, tab_debits):
         debits_main_frame = ctk.CTkFrame(tab_debits, fg_color="transparent"); debits_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
         filter_add_frame = ctk.CTkFrame(debits_main_frame); filter_add_frame.pack(fill="x", pady=(0,10), padx=5)
         ctk.CTkLabel(filter_add_frame, text="Data Inicial:").pack(side="left", padx=(5,0), pady=5)
@@ -420,7 +442,7 @@ class MainAppFrame(ctk.CTkFrame):
             ctk.CTkLabel(hcf,text=cfg["text"],font=ctk.CTkFont(weight="bold"),anchor=cfg["anchor"]).pack(padx=5,pady=5,fill="both",expand=True)
         ctk.CTkFrame(self.debits_table_grid_container,height=1,fg_color=("gray70","gray30")).grid(row=1,column=0,columnspan=len(self.debit_col_config),sticky="ew",pady=(0,5))
 
-    def _load_initial_debits_data(self): # ... (Restaurado)
+    def _load_initial_debits_data(self):
         today=date.today();som=today.replace(day=1)
         if som.month==12:eom=som.replace(year=som.year+1,month=1,day=1)-timedelta(days=1)
         else:eom=som.replace(month=som.month+1,day=1)-timedelta(days=1)
@@ -430,7 +452,7 @@ class MainAppFrame(ctk.CTkFrame):
             self.debits_end_date_entry.delete(0,ctk.END);self.debits_end_date_entry.insert(0,e)
         self._load_and_display_debits(s,e)
 
-    def _load_and_display_debits(self,start_date=None,end_date=None): # ... (Restaurado com correção de cor)
+    def _load_and_display_debits(self,start_date=None,end_date=None):
         for w in self.debits_table_grid_container.winfo_children():
             if w.grid_info().get("row",0)>=2:w.destroy()
         tx=db_manager.get_transactions('Débito',start_date,end_date)
@@ -449,51 +471,44 @@ class MainAppFrame(ctk.CTkFrame):
             ctk.CTkButton(acf,text="✕",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id,d_txt=o:self._confirm_delete_debit(i,d_txt)).grid(row=0,column=1,padx=(2,0),pady=2,sticky="w")
             r+=1
 
-    def _on_filter_debits_button_click(self): # ... (Restaurado)
+    def _on_filter_debits_button_click(self):
         s,e=self.debits_start_date_entry.get(),self.debits_end_date_entry.get()
         try:datetime.strptime(s,"%Y-%m-%d");datetime.strptime(e,"%Y-%m-%d")
         except ValueError:messagebox.showerror("Erro","Data inválida.",parent=self.controller);return
         self._load_and_display_debits(s,e)
-    def _on_add_debit_button_click(self): # ... (Restaurado)
+    def _on_add_debit_button_click(self):
         if hasattr(self,'dialog_add_edit_debit') and self.dialog_add_edit_debit and self.dialog_add_edit_debit.winfo_exists():self.dialog_add_edit_debit.focus();return
         self.dialog_add_edit_debit=AddEditDebitDialog(self.controller,self._on_filter_debits_button_click,None)
-    def _on_edit_debit_button_click(self,transaction_id): # ... (Restaurado)
+    def _on_edit_debit_button_click(self,transaction_id):
         data=db_manager.get_transaction_by_id(transaction_id)
         if data:
             if hasattr(self,'dialog_add_edit_debit') and self.dialog_add_edit_debit and self.dialog_add_edit_debit.winfo_exists():self.dialog_add_edit_debit.focus();return
             self.dialog_add_edit_debit=AddEditDebitDialog(self.controller,self._on_filter_debits_button_click,data)
         else:messagebox.showerror("Erro",f"ID {transaction_id} não encontrado.",parent=self.controller)
-    def _confirm_delete_debit(self,transaction_id,desc): # ... (Restaurado)
+    def _confirm_delete_debit(self,transaction_id,desc):
         d=(desc[:30]+'...') if len(desc)>30 else desc
         if messagebox.askyesno("Confirmar",f"Excluir débito:\n'{d}'?",parent=self.controller):
             s,m=db_manager.delete_transaction(transaction_id)
-            if s:messagebox.showinfo("Sucesso","Débito excluído.",parent=self.controller);self._on_filter_debits_button_click()
-            else:messagebox.showerror("Erro","Não foi possível excluir.",parent=self.controller)
+            if s:messagebox.showinfo("Sucesso",m if m else "Débito excluído.",parent=self.controller);self._on_filter_debits_button_click()
+            else:messagebox.showerror("Erro",m if m else "Não foi possível excluir.",parent=self.controller)
 
-    # --- ABA CARTÕES ---
+    # --- ABA CARTÕES (COM CORREÇÕES E PREPARAÇÃO PARA EDIÇÃO DE FATURA) ---
     def _setup_cards_tab(self, tab_cards):
+        # ... (Como no Passo 66, incluindo os botões de fatura)
         cards_main_frame = ctk.CTkFrame(tab_cards, fg_color="transparent"); cards_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        
         card_action_buttons_frame = ctk.CTkFrame(cards_main_frame); card_action_buttons_frame.pack(fill="x", pady=(0, 10), padx=5, anchor="nw")
         self.add_card_button = ctk.CTkButton(card_action_buttons_frame, text="Adicionar Cartão", command=self._on_add_card_button_click); self.add_card_button.pack(side="left", padx=5, pady=5)
         self.edit_card_button = ctk.CTkButton(card_action_buttons_frame, text="Editar Cartão", command=self._on_edit_card_button_click, state="disabled"); self.edit_card_button.pack(side="left", padx=5, pady=5)
         self.remove_card_button = ctk.CTkButton(card_action_buttons_frame, text="Remover Cartão", command=self._on_remove_card_button_click, state="disabled"); self.remove_card_button.pack(side="left", padx=5, pady=5)
-
         cards_content_frame = ctk.CTkFrame(cards_main_frame, fg_color="transparent"); cards_content_frame.pack(fill="both", expand=True, padx=5, pady=5)
         cards_content_frame.grid_columnconfigure(0, weight=1); cards_content_frame.grid_columnconfigure(1, weight=2); cards_content_frame.grid_rowconfigure(0, weight=1)    
-        
         cards_list_block_frame = ctk.CTkFrame(cards_content_frame, fg_color=("gray90","gray17")); cards_list_block_frame.grid(row=0, column=0, sticky="nsew", padx=(0,5), pady=0)
         ctk.CTkLabel(cards_list_block_frame, text="Meus Cartões", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(10,5), padx=10, anchor="nw")
         self.cards_list_scrollframe = ctk.CTkScrollableFrame(cards_list_block_frame, label_text="", fg_color="transparent"); self.cards_list_scrollframe.pack(fill="both", expand=True, padx=5, pady=5)
         self.cards_list_grid_container = ctk.CTkFrame(self.cards_list_scrollframe, fg_color="transparent"); self.cards_list_grid_container.pack(fill="x", expand=True)
-        
-        # CORREÇÃO: Definição de self.card_list_col_config com 'minsize'
-        self.card_list_col_config = [
-            {"weight":1, "minsize": 120, "text":"Nome", "anchor":"w"},
-            {"weight":1, "minsize": 100, "text":"Bandeira", "anchor":"w"}
-        ]
+        self.card_list_col_config = [{"weight":1, "minsize": 120, "text":"Nome", "anchor":"w"}, {"weight":1, "minsize": 100, "text":"Bandeira", "anchor":"w"}]
         for i,cfg in enumerate(self.card_list_col_config):
-            self.cards_list_grid_container.grid_columnconfigure(i,weight=cfg["weight"],minsize=cfg["minsize"]) # Aplica minsize aqui
+            self.cards_list_grid_container.grid_columnconfigure(i,weight=cfg["weight"],minsize=cfg["minsize"]) 
             h_lbl=ctk.CTkLabel(self.cards_list_grid_container,text=cfg["text"],font=ctk.CTkFont(weight="bold"),anchor=cfg["anchor"],fg_color=("gray80","gray25"),padx=5,pady=3)
             h_lbl.grid(row=0,column=i,padx=(0,1 if i<len(self.card_list_col_config)-1 else 0),pady=(0,1),sticky="ew")
         
@@ -501,7 +516,6 @@ class MainAppFrame(ctk.CTkFrame):
         self.invoice_details_block_frame.grid(row=0, column=1, sticky="nsew", padx=(5,0), pady=0)
         self.invoice_details_block_frame.grid_remove() 
         
-        # Frame para os botões de Ação da Fatura
         invoice_action_buttons_frame = ctk.CTkFrame(self.invoice_details_block_frame, fg_color="transparent")
         invoice_action_buttons_frame.pack(pady=(10,0), padx=10, fill="x", anchor="nw")
         self.add_invoice_button = ctk.CTkButton(invoice_action_buttons_frame, text="Adicionar Fatura", command=self._on_add_invoice_button_click)
@@ -527,7 +541,6 @@ class MainAppFrame(ctk.CTkFrame):
             month_header_frame = ctk.CTkFrame(self.invoice_details_grid_container, fg_color=("gray80", "gray25"), corner_radius=0)
             month_header_frame.grid(row=0, column=i, padx=(0,1 if i < len(months)-1 else 0), pady=(0,1), sticky="nsew")
             ctk.CTkLabel(month_header_frame, text=m_name, font=ctk.CTkFont(weight="bold")).pack(padx=2, pady=5, fill="both", expand=True)
-        
         self._clear_invoice_details_panel() 
 
     def _on_add_card_button_click(self):
@@ -552,7 +565,7 @@ class MainAppFrame(ctk.CTkFrame):
             if s:messagebox.showinfo("Sucesso",m,parent=self.controller);self.selected_card_id=None;self._load_and_display_cards()
             else:messagebox.showerror("Erro",m,parent=self.controller)
 
-    def _load_and_display_cards(self): # CORRIGIDO: Uso de minsize de self.card_list_col_config
+    def _load_and_display_cards(self):
         for w in self.cards_list_grid_container.winfo_children():
             if w.grid_info().get("row",0)>0:w.destroy()
         current_selection_id_before_reload = self.selected_card_id
@@ -568,10 +581,8 @@ class MainAppFrame(ctk.CTkFrame):
             row_fg = self.card_row_default_fg_color if r%2!=0 else ("gray98","gray22")
             rf=ctk.CTkFrame(self.cards_list_grid_container,corner_radius=3,fg_color=row_fg); rf.original_bg_color = row_fg
             rf.grid(row=r,column=0,columnspan=len(self.card_list_col_config),sticky="ew",pady=(0,1),ipady=2)
-            
-            for i,cfg in enumerate(self.card_list_col_config): # Este loop é para configurar as colunas DENTRO de rf
+            for i,cfg in enumerate(self.card_list_col_config):
                 rf.grid_columnconfigure(i,weight=cfg["weight"],minsize=cfg["minsize"]) 
-            
             details_map={"Nome":card.get('nome','-'),"Bandeira":card.get('bandeira','-')}
             for c_idx,key in enumerate(["Nome","Bandeira"]):
                 item_btn=ctk.CTkButton(rf,text=details_map[key],anchor=self.card_list_col_config[c_idx]["anchor"],fg_color="transparent",text_color=ctk.ThemeManager.theme["CTkLabel"]["text_color"],hover=False,command=lambda _id=card['id'],_rf=rf:self._on_card_selected(_id,_rf))
@@ -584,7 +595,7 @@ class MainAppFrame(ctk.CTkFrame):
             if first_rf:self._on_card_selected(first_id,first_rf)
         elif not cards : self.edit_card_button.configure(state="disabled");self.remove_card_button.configure(state="disabled");self._clear_invoice_details_panel();self.selected_card_id=None; self.invoice_details_block_frame.grid_remove()
 
-    def _on_card_selected(self,card_id,selected_rf): # ... (sem alterações)
+    def _on_card_selected(self,card_id,selected_rf):
         if self.last_selected_card_row_frame and self.last_selected_card_row_frame.winfo_exists():
             if hasattr(self.last_selected_card_row_frame,'original_bg_color'): self.last_selected_card_row_frame.configure(fg_color=self.last_selected_card_row_frame.original_bg_color)
             else: self.last_selected_card_row_frame.configure(fg_color=self.card_row_default_fg_color) 
@@ -593,10 +604,11 @@ class MainAppFrame(ctk.CTkFrame):
             if not hasattr(selected_rf,'original_bg_color'): selected_rf.original_bg_color = selected_rf.cget("fg_color")
             selected_rf.configure(fg_color=self.card_row_selected_fg_color);self.last_selected_card_row_frame=selected_rf
         self.current_invoice_year = date.today().year 
-        if hasattr(self,'invoice_details_block_frame'):self.invoice_details_block_frame.grid(row=0,column=1,sticky="nsew",padx=(5,0),pady=5)
+        if hasattr(self,'invoice_details_block_frame'):self.invoice_details_block_frame.grid(row=0,column=1,sticky="nsew",padx=(5,0),pady=0)
         self._setup_year_tabs()
+        self._reset_invoice_selection_and_buttons()
 
-    def _setup_year_tabs(self): # ... (sem alterações)
+    def _setup_year_tabs(self):
         if not hasattr(self, 'year_tab_view_container'): return 
         if hasattr(self, 'year_tab_view') and self.year_tab_view and self.year_tab_view.winfo_exists():
             self.year_tab_view.destroy()
@@ -613,15 +625,17 @@ class MainAppFrame(ctk.CTkFrame):
         self.year_tab_view.set(str(y_now))
         self._on_year_tab_change() 
 
-    def _on_year_tab_change(self): # ... (sem alterações)
+    def _on_year_tab_change(self):
         if not self.selected_card_id or not hasattr(self,'year_tab_view') or not self.year_tab_view.winfo_exists():return
         try:
             sel_y_str=self.year_tab_view.get()
-            if sel_y_str:self.current_invoice_year=int(sel_y_str);self._load_and_display_invoice_details(self.selected_card_id,self.current_invoice_year)
+            if sel_y_str:
+                self.current_invoice_year=int(sel_y_str)
+                self._load_and_display_invoice_details(self.selected_card_id,self.current_invoice_year)
         except ValueError:print(f"Erro: Aba ano '{sel_y_str}'")
         except Exception as e:print(f"Erro _on_year_tab_change: {e}")
 
-    def _clear_invoice_details_panel(self): # ... (sem alterações)
+    def _clear_invoice_details_panel(self): 
         if hasattr(self,'year_tab_view') and self.year_tab_view and self.year_tab_view.winfo_exists():self.year_tab_view.destroy();self.year_tab_view=None
         if hasattr(self,'invoice_details_grid_container'):
             for w in self.invoice_details_grid_container.winfo_children():
@@ -629,91 +643,114 @@ class MainAppFrame(ctk.CTkFrame):
             ctk.CTkLabel(self.invoice_details_grid_container,text="Selecione um cartão e um ano.").grid(row=1,column=0,columnspan=12,pady=20)
         if hasattr(self,'invoice_details_block_frame') and self.selected_card_id is None and self.invoice_details_block_frame.winfo_ismapped():
             self.invoice_details_block_frame.grid_remove()
+        self._reset_invoice_selection_and_buttons()
 
-    # --- MÉTODO ATUALIZADO PARA EXIBIR FATURAS E BOTÃO DE EDIÇÃO ---
-    def _load_and_display_invoice_details(self,card_id,year):
+    def _reset_invoice_selection_and_buttons(self):
+        self.selected_invoice_details = None
+        if hasattr(self, 'edit_invoice_button'): self.edit_invoice_button.configure(state="disabled")
+        if hasattr(self, 'remove_invoice_button'): self.remove_invoice_button.configure(state="disabled")
+        if self.last_selected_invoice_cell_frame and self.last_selected_invoice_cell_frame.winfo_exists():
+             if hasattr(self.last_selected_invoice_cell_frame, 'original_border_color_tuple'): # Usa a tupla
+                self.last_selected_invoice_cell_frame.configure(
+                    border_width=self.last_selected_invoice_cell_frame.original_border_width,
+                    border_color=self.last_selected_invoice_cell_frame.original_border_color_tuple[0 if ctk.get_appearance_mode() == "Light" else 1]
+                )
+             else: # Fallback
+                 self.last_selected_invoice_cell_frame.configure(border_width=1, border_color=self.invoice_cell_default_border_color[0 if ctk.get_appearance_mode() == "Light" else 1])
+        self.last_selected_invoice_cell_frame = None
+
+    def _load_and_display_invoice_details(self,card_id,year): # Implementa seleção de célula de fatura
         if not hasattr(self,'invoice_details_grid_container'):return
         for w in self.invoice_details_grid_container.winfo_children():
-            if w.grid_info().get("row", 0) > 0: 
-                w.destroy()
-        
+            if w.grid_info().get("row", 0) > 0: w.destroy()
+        self._reset_invoice_selection_and_buttons()
         faturas=db_manager.get_faturas(card_id,year)
-        # A mensagem de "Nenhuma fatura" é tratada após o loop se nada for adicionado.
-        
+        if not faturas or all(v==0.0 for v in faturas.values()):
+            ctk.CTkLabel(self.invoice_details_grid_container,text=f"Nenhuma fatura para {year}.").grid(row=1,column=0,columnspan=12,pady=10)
+            return
         current_data_row = 1 
-        has_any_invoice_data_to_show = False # Flag para controlar a mensagem de "nenhuma fatura"
         for i in range(12): 
             month_number = i + 1
-            valor_fatura = faturas.get(month_number,0.0) # Pega o valor, default 0.0
+            valor_fatura = faturas.get(month_number,0.0)
             
-            # Frame para cada célula de fatura (valor + botão editar)
+            # Frame para cada célula que será clicável
             invoice_value_cell_frame = ctk.CTkFrame(self.invoice_details_grid_container, 
-                                                    fg_color="transparent", height=35) # Altura da célula
+                                                    fg_color=self.invoice_cell_default_fg_color, 
+                                                    corner_radius=3, cursor="hand2",
+                                                    height=35, # Altura consistente
+                                                    border_width=1, 
+                                                    border_color=self.invoice_cell_default_border_color[0 if ctk.get_appearance_mode()=="Light" else 1])
             invoice_value_cell_frame.grid(row=current_data_row, column=i, padx=1, pady=1, sticky="nsew")
-            invoice_value_cell_frame.grid_propagate(False) # Impede que widgets internos redimensionem a célula
-
-            # Configura grid interno da célula
-            invoice_value_cell_frame.grid_columnconfigure(0, weight=1)  # Label do valor (expande)
-            invoice_value_cell_frame.grid_columnconfigure(1, weight=0, minsize=30)  # Botão editar (tamanho fixo + padding)
-            invoice_value_cell_frame.grid_rowconfigure(0, weight=1)    # Para centralizar verticalmente
-
-            fatura_value_label = ctk.CTkLabel(invoice_value_cell_frame, text=f"R$ {valor_fatura:.2f}", anchor="e")
-            fatura_value_label.grid(row=0, column=0, padx=(5,2), pady=2, sticky="ew")
+            invoice_value_cell_frame.grid_propagate(False) 
             
-            edit_invoice_btn = ctk.CTkButton(
-                invoice_value_cell_frame, 
-                text="✎", # Símbolo de lápis
-                width=28, height=28,
-                fg_color="transparent", 
-                text_color=("#333333", "#DCE4EE"), 
-                hover_color=("#D3D3D3", "#505050"), # Cor de hover mais sutil
-                command=lambda c_id=card_id, y=year, m=month_number, val=valor_fatura: 
-                                          self._on_invoice_cell_edit_click(c_id, y, m, val) # Novo handler
-            )
-            edit_invoice_btn.grid(row=0, column=1, padx=(0,3), pady=2, sticky="e") 
-            has_any_invoice_data_to_show = True # Marcamos que pelo menos as células foram criadas
+            invoice_value_cell_frame.invoice_details_data = {'card_id': card_id, 'year': year, 'month': month_number, 'value': valor_fatura}
+            invoice_value_cell_frame.original_border_color_tuple = self.invoice_cell_default_border_color
+            invoice_value_cell_frame.original_border_width = 1
 
-        if not has_any_invoice_data_to_show : # Se o loop não rodou (o que não deveria acontecer com range(12))
-             # ou se uma condição mais estrita de "nenhuma fatura" for necessária
-            ctk.CTkLabel(self.invoice_details_grid_container,text=f"Nenhuma fatura para {year}.").grid(row=1,column=0,columnspan=12,pady=10)
+            fatura_value_label = ctk.CTkLabel(invoice_value_cell_frame, text=f"R$ {valor_fatura:.2f}", anchor="center") # Centralizado na célula
+            fatura_value_label.pack(padx=5, pady=5, fill="both", expand=True)
+            
+            invoice_value_cell_frame.bind("<Button-1>", lambda event, cell=invoice_value_cell_frame: self._on_invoice_cell_selected(cell))
+            fatura_value_label.bind("<Button-1>", lambda event, cell=invoice_value_cell_frame: self._on_invoice_cell_selected(cell))
+            
+    def _on_invoice_cell_selected(self, cell_widget):
+        if self.last_selected_invoice_cell_frame and self.last_selected_invoice_cell_frame.winfo_exists():
+            if hasattr(self.last_selected_invoice_cell_frame, 'original_border_color_tuple'):
+                self.last_selected_invoice_cell_frame.configure(
+                    border_width=self.last_selected_invoice_cell_frame.original_border_width,
+                    border_color=self.last_selected_invoice_cell_frame.original_border_color_tuple[0 if ctk.get_appearance_mode() == "Light" else 1]
+                )
+        self.selected_invoice_details = cell_widget.invoice_details_data
+        if cell_widget and cell_widget.winfo_exists():
+            if not hasattr(cell_widget, 'original_border_color_tuple'): 
+                cell_widget.original_border_color_tuple = self.invoice_cell_default_border_color
+                cell_widget.original_border_width = 1
+            cell_widget.configure(border_width=2, border_color=self.invoice_cell_selected_border_color[0 if ctk.get_appearance_mode() == "Light" else 1]) 
+            self.last_selected_invoice_cell_frame = cell_widget
+        
+        print(f"Fatura selecionada: {self.selected_invoice_details}")
+        if hasattr(self, 'edit_invoice_button'): self.edit_invoice_button.configure(state="normal")
+        if hasattr(self, 'remove_invoice_button'): self.remove_invoice_button.configure(state="normal")
 
-
-    # --- NOVO MÉTODO PARA O BOTÃO "ADICIONAR FATURA" ---
     def _on_add_invoice_button_click(self):
         if not self.selected_card_id:
-            messagebox.showwarning("Atenção", "Selecione um cartão da lista primeiro.", parent=self.controller); return
+            messagebox.showwarning("Atenção", "Selecione um cartão.", parent=self.controller); return
         if hasattr(self, 'dialog_upsert_invoice') and self.dialog_upsert_invoice and self.dialog_upsert_invoice.winfo_exists():
             self.dialog_upsert_invoice.focus(); return
-        
-        # Callback para recarregar as faturas do cartão e ano atuais
         refresh_func = lambda c_id=self.selected_card_id, y=self.current_invoice_year: self._load_and_display_invoice_details(c_id, y)
-        
         self.dialog_upsert_invoice = UpsertInvoiceDialog(
             master=self.controller, controller=self.controller, 
             refresh_callback=refresh_func,
             card_id=self.selected_card_id, year=self.current_invoice_year,
-            month=None, current_value=0.0, edit_mode=False # month=None para indicar que é uma nova fatura
+            edit_mode=False
         )
             
-    # --- NOVO MÉTODO PARA ABRIR O DIÁLOGO DE EDIÇÃO DE FATURA INDIVIDUAL (chamado pelo '✎') ---
-    def _on_invoice_cell_edit_click(self, card_id: int, year: int, month: int, current_value: float):
-        """Abre o diálogo para editar o valor de uma fatura específica."""
+    def _on_edit_invoice_button_click(self): 
+        if not self.selected_invoice_details:
+            messagebox.showwarning("Atenção", "Selecione uma fatura para editar.", parent=self.controller); return
         if hasattr(self, 'dialog_upsert_invoice') and self.dialog_upsert_invoice is not None and self.dialog_upsert_invoice.winfo_exists():
-            self.dialog_upsert_invoice.focus()
-            return
-        
-        refresh_func = lambda c_id_refresh=card_id, y_refresh=year: self._load_and_display_invoice_details(c_id_refresh, y_refresh)
-        
+            self.dialog_upsert_invoice.focus(); return
+        data = self.selected_invoice_details 
+        refresh_func = lambda c_id=data['card_id'], y=data['year']: self._load_and_display_invoice_details(c_id, y)
         self.dialog_upsert_invoice = UpsertInvoiceDialog(
-            master=self.controller, 
-            controller=self.controller,
-            card_id=card_id, 
-            year=year, 
-            month=month, 
-            current_value=current_value,
+            master=self.controller, controller=self.controller,
             refresh_callback=refresh_func,
-            edit_mode=True # Indica que estamos editando
+            card_id=data['card_id'], year=data['year'], month=data['month'],
+            current_value=data['value'], edit_mode=True
         )
+
+    def _on_remove_invoice_button_click(self):
+        if not self.selected_invoice_details:
+            messagebox.showwarning("Atenção", "Selecione uma fatura para remover.", parent=self.controller); return
+        data = self.selected_invoice_details
+        month_names=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+        month_name_str = month_names[data['month']-1] if 0 < data['month'] <= 12 else f"Mês {data['month']}"
+        confirm = messagebox.askyesno("Confirmar Remoção", f"Remover fatura de {month_name_str}/{data['year']} (valor R$ {data['value']:.2f})?\n(Isso definirá o valor para 0.00).", parent=self.controller )
+        if confirm:
+            if db_manager.upsert_fatura(data['card_id'], data['year'], data['month'], 0.0): 
+                messagebox.showinfo("Sucesso", "Fatura removida (valor definido para 0).", parent=self.controller)
+                self._load_and_display_invoice_details(data['card_id'], data['year']) 
+            else: messagebox.showerror("Erro", "Não foi possível remover a fatura.", parent=self.controller)
             
     # Placeholders para outras abas e callbacks de menu
     def _setup_calculations_tab(self, tab): label = ctk.CTkLabel(tab, text="Conteúdo de Cálculos Aqui"); label.pack(pady=20, padx=20)
@@ -731,8 +768,8 @@ if __name__ == '__main__':
     class MockAppController(ctk.CTk):
         def __init__(self):
             super().__init__(); self.title("Teste MainAppFrame - Aba Cartões"); self.geometry("1200x700"); ctk.set_appearance_mode("light")
-            db_path = db_manager.DATABASE_PATH
             if not os.path.exists(db_manager.DATABASE_DIR): os.makedirs(db_manager.DATABASE_DIR)
+            db_path = db_manager.DATABASE_PATH
             if os.path.exists(db_path): 
                 try: os.remove(db_path)
                 except PermissionError: print(f"AVISO: Não foi possível remover {db_path}. Pode estar em uso.")
