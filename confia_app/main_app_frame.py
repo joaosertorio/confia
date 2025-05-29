@@ -1,15 +1,20 @@
 # C:\Confia\confia_app\main_app_frame.py
 import customtkinter as ctk
 import tkinter
-from tkinter import font as tkFont # <<< ADICIONAR ESTE IMPORT
 from tkinter import messagebox
+from tkinter import font as tkFont 
 from datetime import datetime, date, timedelta
 import db_manager 
 import os
 
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+
 # --- CLASSES DE DIÁLOGO ---
 
-class AddEditCreditDialog(ctk.CTkToplevel):
+class AddEditCreditDialog(ctk.CTkToplevel): # Como no Passo 86
     def __init__(self, master, refresh_callback, transaction_data=None):
         super().__init__(master)
         self.refresh_callback = refresh_callback
@@ -77,7 +82,7 @@ class AddEditCreditDialog(ctk.CTkToplevel):
             else:messagebox.showerror("Erro","Não foi possível adicionar o crédito.",parent=self)
         if success: messagebox.showinfo("Sucesso","Crédito salvo!",parent=self.master);self.refresh_callback();self.destroy()
 
-class AddEditDebitDialog(ctk.CTkToplevel):
+class AddEditDebitDialog(ctk.CTkToplevel): # Como no Passo 86
     def __init__(self, master, refresh_callback, transaction_data=None):
         super().__init__(master); self.refresh_callback=refresh_callback; self.categories_map={}; self.editing_transaction_id=None
         if transaction_data: self.editing_transaction_id=transaction_data.get('id'); self.title("Editar Débito")
@@ -136,7 +141,7 @@ class AddEditDebitDialog(ctk.CTkToplevel):
             else:messagebox.showerror("Erro","Não foi possível adicionar o débito.",parent=self)
         if success: messagebox.showinfo("Sucesso","Débito salvo!",parent=self.master);self.refresh_callback();self.destroy()
 
-class AddEditCardDialog(ctk.CTkToplevel):
+class AddEditCardDialog(ctk.CTkToplevel): # Como no Passo 86
     def __init__(self, master, controller, refresh_callback, card_data=None):
         super().__init__(master);self.controller=controller;self.refresh_callback=refresh_callback;self.editing_card_id=None
         self.card_color_map={"Azul Clássico":"#3B8ED0","Verde Esmeralda":"#2ECC71","Vermelho Rubi":"#E74C3C","Amarelo Solar":"#F1C40F","Laranja Vibrante":"#E67E22","Roxo Profundo":"#8E44AD","Cinza Grafite":"#34495E","Prata":"#BDC3C7","Turquesa":"#1ABC9C", "Preto":"#000000", "Branco":"#FFFFFF"}
@@ -183,13 +188,14 @@ class AddEditCardDialog(ctk.CTkToplevel):
             else:messagebox.showerror("Erro","Não foi possível adicionar o cartão.",parent=self)
         if success_flag: self.refresh_callback(); self.destroy()
 
-class UpsertInvoiceDialog(ctk.CTkToplevel):
+class UpsertInvoiceDialog(ctk.CTkToplevel): # Como no Passo 68
     def __init__(self, master, controller, refresh_callback, card_id, year, month=None, current_value=0.0, edit_mode=False):
         super().__init__(master)
         self.controller = controller; self.refresh_callback = refresh_callback
         self.card_id_to_affect = card_id; self.year_to_affect = year
         self.month_to_affect = month; self.current_value = current_value
         self.edit_mode = edit_mode 
+        self.cards_map = {} 
         self.month_names_map = {"Janeiro":1, "Fevereiro":2, "Março":3, "Abril":4, "Maio":5, "Junho":6, "Julho":7, "Agosto":8, "Setembro":9, "Outubro":10, "Novembro":11, "Dezembro":12}
         self.month_numbers_map = {v: k for k, v in self.month_names_map.items()}
         card_info = db_manager.get_card_by_id(self.card_id_to_affect)
@@ -236,11 +242,12 @@ class UpsertInvoiceDialog(ctk.CTkToplevel):
         if not val_str: messagebox.showerror("Erro", "Valor é obrigatório.", parent=self); return
         try: val_final = float(val_str)
         except ValueError: messagebox.showerror("Erro", "Valor da fatura inválido.", parent=self); return
-        success_flag = False
+
         if db_manager.upsert_fatura(card_id_final,year_final,month_final,val_final):
-            messagebox.showinfo("Sucesso","Fatura salva!",parent=self.master); success_flag = True
+            messagebox.showinfo("Sucesso","Fatura salva!",parent=self.master)
+            self.refresh_callback(card_id_final,year_final) 
+            self.destroy()
         else: messagebox.showerror("Erro","Não foi possível salvar fatura.",parent=self)
-        if success_flag: self.refresh_callback(card_id_final,year_final); self.destroy()
 
 # --- CLASSE MAINAPPFRAME ---
 class MainAppFrame(ctk.CTkFrame):
@@ -249,6 +256,7 @@ class MainAppFrame(ctk.CTkFrame):
         self.controller = controller
         self.configure(fg_color="transparent")
         
+        print("DEBUG_MainAppFrame: __init__ - INÍCIO")
         self.dialog_add_edit_credit = None 
         self.dialog_add_edit_debit = None
         self.dialog_add_edit_card = None 
@@ -259,6 +267,7 @@ class MainAppFrame(ctk.CTkFrame):
         
         self.card_row_default_fg_color = ("gray92", "gray20") 
         self.card_row_selected_fg_color = ("#3B8ED0", "#1F6AA5") 
+        
         self.year_tab_selected_color = ctk.ThemeManager.theme["CTkButton"]["fg_color"]
         self.year_tab_selected_hover_color = ctk.ThemeManager.theme["CTkButton"]["hover_color"]
         self.year_tab_unselected_color = ("gray75", "gray28") 
@@ -267,17 +276,11 @@ class MainAppFrame(ctk.CTkFrame):
         self.current_invoice_year = date.today().year 
         self.selected_invoice_details = None 
         self.last_selected_invoice_cell_frame = None 
-        self.invoice_cell_selected_border_color = self.card_row_selected_fg_color
-        self.invoice_cell_default_border_color = ("gray75", "gray28")
-        self.canvas_chart1 = None; self.canvas_chart2 = None; self.canvas_chart3 = None; self.canvas_chart4 = None
         
-        # --- ADICIONAR/GARANTIR ESTAS LINHAS ---
-        self.invoice_cell_default_fg_color = ("#FFFFFF", "#333333") # Cor padrão para células de fatura
-        self.invoice_cell_selected_border_color = self.card_row_selected_fg_color # Usa a mesma cor de destaque azul para borda
-        self.invoice_cell_default_border_color = ("gray75", "gray28") # Cor de borda sutil para células não selecionadas
-        # --- FIM DA ADIÇÃO/GARANTIA ---
+        self.invoice_cell_default_fg_color = ("#FFFFFF", "#333333") 
+        self.invoice_cell_selected_border_color = self.card_row_selected_fg_color 
+        self.invoice_cell_default_border_color = ("gray75", "gray28") 
 
-        # Atributos para os canvases dos gráficos do Matplotlib
         self.canvas_chart1 = None 
         self.canvas_chart2 = None
         self.canvas_chart3 = None
@@ -285,7 +288,7 @@ class MainAppFrame(ctk.CTkFrame):
 
         self._setup_menu()
         self._create_tabs() 
-        print("DEBUG_MainAppFrame: __init__ COMPLETO.")
+        print("DEBUG_MainAppFrame: __init__ - FIM")
 
     def _setup_menu(self):
         menubar = tkinter.Menu(self.controller)
@@ -316,9 +319,355 @@ class MainAppFrame(ctk.CTkFrame):
         
         self.controller.config(menu=menubar)
 
-    # ... (Mantenha _create_tabs, _on_tab_change, e toda a configuração das abas 
-    #      (Dashboard, Créditos, Débitos, Cartões) como estavam na última versão funcional) ...
-    # ... (O código completo para essas seções está no Passo 86) ...
+    def _create_tabs(self):
+        print("DEBUG_TABS: _create_tabs - INÍCIO")
+        self.tab_view = ctk.CTkTabview(self, corner_radius=10)
+        self.tab_view.pack(pady=10, padx=10, fill="both", expand=True)
+
+        tab_names = ["Dashboard", "Créditos", "Débitos", "Cartões", "Cálculos", "Relatórios/Insights"]
+        tab_setup_methods = {
+            "Dashboard": self._setup_dashboard_tab, "Créditos": self._setup_credits_tab,
+            "Débitos": self._setup_debits_tab, "Cartões": self._setup_cards_tab,
+            "Cálculos": self._setup_calculations_tab, "Relatórios/Insights": self._setup_reports_tab
+        }
+
+        for name in tab_names:
+            print(f"DEBUG_TABS: Adicionando e configurando aba {name}...")
+            tab = self.tab_view.add(name)
+            setattr(self, f"tab_{name.lower().replace('/','_').replace(' ','_')}", tab)
+            if name in tab_setup_methods: 
+                tab_setup_methods[name](tab) # Chama o método de setup específico
+        
+        print("DEBUG_TABS: Definindo aba inicial para 'Dashboard' com set()...")
+        self.tab_view.set("Dashboard") 
+        current_set_tab = self.tab_view.get()
+        print(f"DEBUG_TABS: Aba atual APÓS set() é: '{current_set_tab}'")
+        
+        self.tab_view.configure(command=self._on_tab_change)
+        
+        # Garante que o conteúdo da aba Dashboard seja carregado na inicialização
+        if current_set_tab == "Dashboard" and hasattr(self, "_on_tab_change") and callable(self._on_tab_change):
+            print(f"DEBUG_TABS: Chamando _on_tab_change() para carregar conteúdo inicial do Dashboard...")
+            self._on_tab_change() 
+        print("DEBUG_TABS: _create_tabs - FIM")
+
+
+    def _on_tab_change(self):
+        selected_tab_name = self.tab_view.get() 
+        print(f"DEBUG: _on_tab_change - Aba agora é: {selected_tab_name}")
+        if selected_tab_name == "Dashboard":
+             if hasattr(self, '_update_all_dashboard_charts'): self._update_all_dashboard_charts()
+        elif selected_tab_name == "Créditos":
+            if hasattr(self, '_load_initial_credits_data'): self._load_initial_credits_data()
+        elif selected_tab_name == "Débitos":
+            if hasattr(self, '_load_initial_debits_data'): self._load_initial_debits_data()
+        elif selected_tab_name == "Cartões": 
+            if hasattr(self, '_load_and_display_cards'): self._load_and_display_cards()
+            # Se nenhum cartão estiver selecionado ao mudar para a aba Cartões, limpa e oculta o painel de faturas.
+            if self.selected_card_id is None and hasattr(self, 'invoice_details_block_frame') and self.invoice_details_block_frame.winfo_ismapped():
+                 self.invoice_details_block_frame.grid_remove()
+                 self._reset_invoice_selection_and_buttons() 
+    
+    def _setup_dashboard_tab(self, tab_dashboard):
+        print("DEBUG_DASH: _setup_dashboard_tab - INÍCIO")
+        for widget in tab_dashboard.winfo_children(): widget.destroy()
+
+        dashboard_main_frame = ctk.CTkFrame(tab_dashboard, fg_color="transparent")
+        dashboard_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        dashboard_main_frame.grid_columnconfigure(0, weight=1)
+        dashboard_main_frame.grid_rowconfigure(0, weight=0) 
+        dashboard_main_frame.grid_rowconfigure(1, weight=0)  
+        dashboard_main_frame.grid_rowconfigure(2, weight=1)  
+
+        main_filter_frame = ctk.CTkFrame(dashboard_main_frame)
+        main_filter_frame.grid(row=0, column=0, padx=0, pady=(0,10), sticky="ew")
+        ctk.CTkLabel(main_filter_frame, text="Data Inicial:").pack(side="left", padx=(5,0), pady=5)
+        today = date.today(); first_day_month = today.replace(day=1)
+        self.dashboard_start_date_entry = ctk.CTkEntry(main_filter_frame, placeholder_text="YYYY-MM-DD", width=120)
+        self.dashboard_start_date_entry.pack(side="left", padx=(0,10), pady=5)
+        self.dashboard_start_date_entry.insert(0, first_day_month.strftime("%Y-%m-%d"))
+        ctk.CTkLabel(main_filter_frame, text="Data Final:").pack(side="left", padx=(5,0), pady=5)
+        self.dashboard_end_date_entry = ctk.CTkEntry(main_filter_frame, placeholder_text="YYYY-MM-DD", width=120)
+        self.dashboard_end_date_entry.pack(side="left", padx=(0,10), pady=5)
+        if today.month == 12: last_day_month = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+        else: last_day_month = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+        self.dashboard_end_date_entry.insert(0, last_day_month.strftime("%Y-%m-%d"))
+        apply_filter_button = ctk.CTkButton(main_filter_frame, text="Aplicar Filtro", width=100, command=self._update_all_dashboard_charts)
+        apply_filter_button.pack(side="left", padx=10, pady=5)
+        
+        card_year_filter_frame = ctk.CTkFrame(dashboard_main_frame)
+        card_year_filter_frame.grid(row=1, column=0, padx=0, pady=(0,10), sticky="ew")
+        ctk.CTkLabel(card_year_filter_frame, text="Ano (Gráficos de Cartão):").pack(side="left", padx=(5,0), pady=5)
+        current_year = date.today().year
+        year_options = [str(current_year - 1), str(current_year), str(current_year + 1)]
+        self.dashboard_card_year_var = ctk.StringVar(value=str(current_year))
+        self.dashboard_card_year_selector = ctk.CTkSegmentedButton(
+            card_year_filter_frame, values=year_options, variable=self.dashboard_card_year_var,
+            command=self._update_all_dashboard_charts 
+        )
+        self.dashboard_card_year_selector.pack(side="left", padx=10, pady=5)
+        
+        charts_container_frame = ctk.CTkFrame(dashboard_main_frame, fg_color="transparent")
+        charts_container_frame.grid(row=2, column=0, sticky="nsew", padx=0, pady=0)
+        charts_container_frame.grid_columnconfigure(0, weight=1); charts_container_frame.grid_columnconfigure(1, weight=1)
+        charts_container_frame.grid_rowconfigure(0, weight=1); charts_container_frame.grid_rowconfigure(1, weight=1)
+        self.chart_frame_1 = ctk.CTkFrame(charts_container_frame, fg_color=("gray90", "gray25")); self.chart_frame_1.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+        self.chart_frame_2 = ctk.CTkFrame(charts_container_frame, fg_color=("gray90", "gray25")); self.chart_frame_2.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+        self.chart_frame_3 = ctk.CTkFrame(charts_container_frame, fg_color=("gray90", "gray25")); self.chart_frame_3.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
+        self.chart_frame_4 = ctk.CTkFrame(charts_container_frame, fg_color=("gray90", "gray25")); self.chart_frame_4.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
+        print("DEBUG_DASH: _setup_dashboard_tab - Estrutura de filtros e frames de gráfico criada.")
+
+    def _update_all_dashboard_charts(self, segmented_button_value=None):
+        print("DEBUG_DASH: _update_all_dashboard_charts - INÍCIO")
+        if not (hasattr(self, 'dashboard_start_date_entry') and hasattr(self, 'dashboard_end_date_entry') and hasattr(self, 'dashboard_card_year_var')):
+            print("DEBUG_DASH: Widgets do dashboard ainda não inicializados."); return
+        start_date_filter = self.dashboard_start_date_entry.get(); end_date_filter = self.dashboard_end_date_entry.get()
+        try: datetime.strptime(start_date_filter, "%Y-%m-%d"); datetime.strptime(end_date_filter, "%Y-%m-%d")
+        except ValueError: messagebox.showerror("Erro", "Formato de data inválido.", parent=self.controller); return
+        year_for_cards_str = self.dashboard_card_year_var.get() 
+        try: year_for_cards = int(year_for_cards_str)
+        except ValueError: messagebox.showerror("Erro", "Ano inválido para cartões.", parent=self.controller); return
+        print(f"DEBUG_DASH: Atualizando dashboard: Período [{start_date_filter}-{end_date_filter}], Ano Cartões [{year_for_cards}]")
+        for chart_attr in ["chart_frame_1", "chart_frame_2", "chart_frame_3", "chart_frame_4"]:
+            if hasattr(self, chart_attr):
+                frame = getattr(self, chart_attr)
+                for widget in frame.winfo_children(): widget.destroy()
+        expenses_data = db_manager.get_total_spending_by_category(start_date_filter, end_date_filter)
+        if hasattr(self, 'chart_frame_1'): self._create_or_update_pie_chart_expenses(expenses_data, self.chart_frame_1)
+        if hasattr(self, 'chart_frame_2'): ctk.CTkLabel(self.chart_frame_2, text=f"Barras Entradas x Saídas\n(A ser implementado)", wraplength=200).pack(padx=10, pady=10, expand=True, fill="both")
+        if hasattr(self, 'chart_frame_3'): ctk.CTkLabel(self.chart_frame_3, text=f"Linhas Cartões Indiv.\nAno: {year_for_cards}\n(A ser implementado)", wraplength=200).pack(padx=10, pady=10, expand=True, fill="both")
+        if hasattr(self, 'chart_frame_4'): ctk.CTkLabel(self.chart_frame_4, text=f"Linha Consolidada Cartões\nAno: {year_for_cards}\n(A ser implementado)", wraplength=200).pack(padx=10, pady=10, expand=True, fill="both")
+        print("DEBUG_DASH: Gráficos atualizados (ou placeholders).")
+
+    def _create_or_update_pie_chart_expenses(self, data, parent_frame):
+        # ... (Implementação completa do Passo 90, com correção da variável pie_edge_color) ...
+        print(f"DEBUG_DASH_CHART1: Pizza. Dados: {len(data) if data else 'Sem dados'}")
+        if hasattr(self, 'canvas_chart1') and self.canvas_chart1: self.canvas_chart1.get_tk_widget().destroy(); self.canvas_chart1 = None
+        for widget in parent_frame.winfo_children(): widget.destroy()
+        if not data: ctk.CTkLabel(parent_frame, text="Sem despesas no período.").pack(padx=10, pady=10, expand=True, fill="both"); return
+        labels=[i[0] for i in data]; hex_colors=[i[1] if (i[1] and i[1].startswith("#") and len(i[1])==7) else "#808080" for i in data]; sizes=[i[2] for i in data]
+        mode=ctk.get_appearance_mode(); 
+        if mode == "Dark": safe_fig_bg_color = "#2B2B2B"; safe_text_color = "#DCE4EE"   
+        else: safe_fig_bg_color = "#EBEBEB"; safe_text_color = "#1F1F1F"   
+        pie_edge_color = safe_fig_bg_color # CORRIGIDO AQUI (usar pie_edge_color)
+        def autopct_format(values):
+            def func(pct):
+                total=sum(values); val=int(round(pct*total/100.0))
+                return f'{pct:.1f}%\n(R$ {val:.2f})'
+            return func
+        try:
+            fig=Figure(figsize=(5.5,4.5),dpi=90,facecolor=safe_fig_bg_color); ax=fig.add_subplot(111); ax.set_facecolor(safe_fig_bg_color)
+            valid_colors=[]; 
+            for hc in hex_colors:
+                try:mcolors.to_rgba(hc);valid_colors.append(hc[:7])
+                except ValueError:valid_colors.append("#808080")
+            if not valid_colors and sizes:valid_colors=None
+            if not sizes:ctk.CTkLabel(parent_frame,text="Sem dados.").pack(expand=True);return
+            wedges,_,autotexts_list=ax.pie(sizes,colors=valid_colors,autopct=autopct_format(sizes),startangle=90,pctdistance=0.75,wedgeprops={'edgecolor':pie_edge_color,'linewidth':0.5}) 
+            for at_item in autotexts_list:at_item.set_color(safe_text_color);at_item.set_fontsize(9);at_item.set_fontweight('normal')
+            centre_circle = plt.Circle((0,0),0.60,fc=safe_fig_bg_color);ax.add_artist(centre_circle);ax.axis('equal')
+            if labels and 0<len(labels)<=7:
+                lg_ncol=1;lg_loc='center left';bbox=(1.05,0.5);fig_r_margin=0.60
+                if len(labels)>4:lg_loc='upper center';bbox=(0.5,-0.05);lg_ncol=min(3,len(labels));fig_r_margin=0.95
+                ax.legend(wedges,[f"{l} (R$ {s:.2f})" for l,s in zip(labels,sizes)],title="Categorias",loc=lg_loc,bbox_to_anchor=bbox,fontsize=8,labelcolor=safe_text_color,title_fontproperties={'size':9,'weight':'bold'},facecolor=safe_fig_bg_color,edgecolor=safe_fig_bg_color,frameon=False,ncol=lg_ncol)
+                fig.subplots_adjust(left=0.05,right=fig_r_margin,top=0.95,bottom=0.28 if lg_loc=='upper center' and lg_ncol > 1 else 0.20 if lg_loc=='upper center' else 0.1)
+            else:fig.subplots_adjust(left=0.05,right=0.95,top=0.95,bottom=0.05)
+            self.canvas_chart1=FigureCanvasTkAgg(fig,master=parent_frame);self.canvas_chart1.draw()
+            self.canvas_chart1.get_tk_widget().pack(side=tkinter.TOP,fill=tkinter.BOTH,expand=True,padx=0,pady=0)
+            print("DEBUG_DASH_CHART1: Gráfico de pizza criado/atualizado.")
+        except Exception as e:print(f"Erro ao criar gráfico: {e}");import traceback;traceback.print_exc();ctk.CTkLabel(parent_frame,text=f"Erro gráfico:\n{str(e)[:100]}").pack()
+
+       #  Isso inclui _setup_credits_tab, _load_initial_credits_data, etc.
+    #  _setup_debits_tab e seus métodos.
+    #  _setup_cards_tab e seus métodos (incluindo os para faturas).
+
+    # --- MÉTODOS DAS ABAS CRÉDITOS E DÉBITOS (COMO ESTAVAM NA VERSÃO ESTÁVEL) ---
+    def _setup_credits_tab(self, tab_credits):
+        credits_main_frame = ctk.CTkFrame(tab_credits, fg_color="transparent"); credits_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        filter_add_frame = ctk.CTkFrame(credits_main_frame); filter_add_frame.pack(fill="x", pady=(0,10), padx=5)
+        ctk.CTkLabel(filter_add_frame, text="Data Inicial:").pack(side="left", padx=(5,0), pady=5)
+        self.credits_start_date_entry = ctk.CTkEntry(filter_add_frame, placeholder_text="YYYY-MM-DD", width=120); self.credits_start_date_entry.pack(side="left", padx=(0,10), pady=5)
+        ctk.CTkLabel(filter_add_frame, text="Data Final:").pack(side="left", padx=(5,0), pady=5)
+        self.credits_end_date_entry = ctk.CTkEntry(filter_add_frame, placeholder_text="YYYY-MM-DD", width=120); self.credits_end_date_entry.pack(side="left", padx=(0,10), pady=5)
+        ctk.CTkButton(filter_add_frame, text="Filtrar", width=80, command=self._on_filter_credits_button_click).pack(side="left", padx=5, pady=5)
+        ctk.CTkButton(filter_add_frame, text="Adicionar Crédito", command=self._on_add_credit_button_click).pack(side="right", padx=5, pady=5)
+        self.credits_table_scrollframe = ctk.CTkScrollableFrame(credits_main_frame, label_text="Registros de Crédito"); self.credits_table_scrollframe.pack(fill="both", expand=True, padx=5, pady=5)
+        self.credits_table_grid_container = ctk.CTkFrame(self.credits_table_scrollframe, fg_color=("gray95", "gray20")); self.credits_table_grid_container.pack(fill="both", expand=True)
+        self.credit_col_config = [{"weight":0,"minsize":100,"text":"Data","anchor":"w"},{"weight":0,"minsize":120,"text":"Valor","anchor":"e"},{"weight":1,"minsize":130,"text":"Categoria","anchor":"w"},{"weight":2,"minsize":150,"text":"Observação","anchor":"w"},{"weight":0,"minsize":80,"text":"Ações","anchor":"center"}]
+        for i,cfg in enumerate(self.credit_col_config):
+            self.credits_table_grid_container.grid_columnconfigure(i,weight=cfg["weight"],minsize=cfg["minsize"])
+            hcf=ctk.CTkFrame(self.credits_table_grid_container,fg_color=("gray85","gray25"),corner_radius=0);hcf.grid(row=0,column=i,sticky="nsew")
+            ctk.CTkLabel(hcf,text=cfg["text"],font=ctk.CTkFont(weight="bold"),anchor=cfg["anchor"]).pack(padx=5,pady=5,fill="both",expand=True)
+        ctk.CTkFrame(self.credits_table_grid_container,height=1,fg_color=("gray70","gray30")).grid(row=1,column=0,columnspan=len(self.credit_col_config),sticky="ew",pady=(0,5))
+
+    def _load_initial_credits_data(self):
+        today=date.today();som=today.replace(day=1)
+        if som.month==12:eom=som.replace(year=som.year+1,month=1,day=1)-timedelta(days=1)
+        else:eom=som.replace(month=som.month+1,day=1)-timedelta(days=1)
+        s,e=som.strftime("%Y-%m-%d"),eom.strftime("%Y-%m-%d")
+        if hasattr(self,'credits_start_date_entry'):
+            self.credits_start_date_entry.delete(0,ctk.END);self.credits_start_date_entry.insert(0,s)
+            self.credits_end_date_entry.delete(0,ctk.END);self.credits_end_date_entry.insert(0,e)
+        self._load_and_display_credits(s,e)
+
+    def _load_and_display_credits(self,start_date=None,end_date=None):
+        for w in self.credits_table_grid_container.winfo_children():
+            if w.grid_info().get("row",0)>=2:w.destroy()
+        tx=db_manager.get_transactions('Crédito',start_date,end_date)
+        if not tx:ctk.CTkLabel(self.credits_table_grid_container,text="Nenhum crédito encontrado.").grid(row=2,column=0,columnspan=len(self.credit_col_config),pady=10);return
+        r=2
+        for t_id,d,v,cat,o in tx:
+            fg=("gray98","gray22") if r%2==0 else ("gray92","gray18")
+            details=[(d,0),(f"R$ {v:.2f}",1),(cat,2),(o,3)]
+            for col,(txt,c_idx) in enumerate(details):
+                cf=ctk.CTkFrame(self.credits_table_grid_container,fg_color=fg,corner_radius=0);cf.grid(row=r,column=col,sticky="nsew")
+                wl=self.credit_col_config[c_idx]["minsize"]-10 if c_idx==3 else 0
+                ctk.CTkLabel(cf,text=txt,anchor=self.credit_col_config[c_idx]["anchor"],wraplength=wl if wl>0 else 0,justify="left").pack(padx=5,pady=3,fill="both",expand=True)
+            acf=ctk.CTkFrame(self.credits_table_grid_container,fg_color=fg,corner_radius=0);acf.grid(row=r,column=4,sticky="nsew")
+            acf.grid_columnconfigure(0,weight=1);acf.grid_columnconfigure(1,weight=1);acf.grid_rowconfigure(0,weight=1)
+            ctk.CTkButton(acf,text="✎",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id:self._on_edit_credit_button_click(i)).grid(row=0,column=0,padx=(0,2),pady=2,sticky="e")
+            ctk.CTkButton(acf,text="✕",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id,d_txt=o:self._confirm_delete_credit(i,d_txt)).grid(row=0,column=1,padx=(2,0),pady=2,sticky="w")
+            r+=1
+            
+    def _on_filter_credits_button_click(self):
+        s,e=self.credits_start_date_entry.get(),self.credits_end_date_entry.get()
+        try:datetime.strptime(s,"%Y-%m-%d");datetime.strptime(e,"%Y-%m-%d")
+        except ValueError:messagebox.showerror("Erro","Data inválida.",parent=self.controller);return
+        self._load_and_display_credits(s,e)
+    def _on_add_credit_button_click(self):
+        if hasattr(self,'dialog_add_edit_credit') and self.dialog_add_edit_credit and self.dialog_add_edit_credit.winfo_exists():self.dialog_add_edit_credit.focus();return
+        self.dialog_add_edit_credit=AddEditCreditDialog(self.controller,self._on_filter_credits_button_click,None)
+    def _on_edit_credit_button_click(self,transaction_id):
+        data=db_manager.get_transaction_by_id(transaction_id)
+        if data:
+            if hasattr(self,'dialog_add_edit_credit') and self.dialog_add_edit_credit and self.dialog_add_edit_credit.winfo_exists():self.dialog_add_edit_credit.focus();return
+            self.dialog_add_edit_credit=AddEditCreditDialog(self.controller,self._on_filter_credits_button_click,data)
+        else:messagebox.showerror("Erro",f"ID {transaction_id} não encontrado.",parent=self.controller)
+    def _confirm_delete_credit(self,transaction_id,desc):
+        d=(desc[:30]+'...') if len(desc)>30 else desc
+        if messagebox.askyesno("Confirmar",f"Excluir crédito:\n'{d}'?",parent=self.controller):
+            if db_manager.delete_transaction(transaction_id):messagebox.showinfo("Sucesso","Crédito excluído.",parent=self.controller);self._on_filter_credits_button_click()
+            else:messagebox.showerror("Erro","Não foi possível excluir.",parent=self.controller)
+
+    def _setup_debits_tab(self, tab_debits):
+        debits_main_frame = ctk.CTkFrame(tab_debits, fg_color="transparent"); debits_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        filter_add_frame = ctk.CTkFrame(debits_main_frame); filter_add_frame.pack(fill="x", pady=(0,10), padx=5)
+        ctk.CTkLabel(filter_add_frame, text="Data Inicial:").pack(side="left", padx=(5,0), pady=5)
+        self.debits_start_date_entry = ctk.CTkEntry(filter_add_frame, placeholder_text="YYYY-MM-DD", width=120); self.debits_start_date_entry.pack(side="left", padx=(0,10), pady=5)
+        ctk.CTkLabel(filter_add_frame, text="Data Final:").pack(side="left", padx=(5,0), pady=5)
+        self.debits_end_date_entry = ctk.CTkEntry(filter_add_frame, placeholder_text="YYYY-MM-DD", width=120); self.debits_end_date_entry.pack(side="left", padx=(0,10), pady=5)
+        ctk.CTkButton(filter_add_frame, text="Filtrar", width=80, command=self._on_filter_debits_button_click).pack(side="left", padx=5, pady=5)
+        ctk.CTkButton(filter_add_frame, text="Adicionar Débito", command=self._on_add_debit_button_click).pack(side="right", padx=5, pady=5)
+        self.debits_table_scrollframe = ctk.CTkScrollableFrame(debits_main_frame, label_text="Registros de Débito"); self.debits_table_scrollframe.pack(fill="both", expand=True, padx=5, pady=5)
+        self.debits_table_grid_container = ctk.CTkFrame(self.debits_table_scrollframe, fg_color=("gray95", "gray20")); self.debits_table_grid_container.pack(fill="both", expand=True)
+        self.debit_col_config = self.credit_col_config 
+        for i,cfg in enumerate(self.debit_col_config):
+            self.debits_table_grid_container.grid_columnconfigure(i,weight=cfg["weight"],minsize=cfg["minsize"])
+            hcf=ctk.CTkFrame(self.debits_table_grid_container,fg_color=("gray85","gray25"),corner_radius=0);hcf.grid(row=0,column=i,sticky="nsew")
+            ctk.CTkLabel(hcf,text=cfg["text"],font=ctk.CTkFont(weight="bold"),anchor=cfg["anchor"]).pack(padx=5,pady=5,fill="both",expand=True)
+        ctk.CTkFrame(self.debits_table_grid_container,height=1,fg_color=("gray70","gray30")).grid(row=1,column=0,columnspan=len(self.debit_col_config),sticky="ew",pady=(0,5))
+        
+        # --- ABA CARTÕES (COM CORREÇÕES E PREPARAÇÃO PARA EDIÇÃO DE FATURA) ---
+    def _setup_cards_tab(self, tab_cards):
+        # ... (incluindo os botões de fatura)
+        cards_main_frame = ctk.CTkFrame(tab_cards, fg_color="transparent"); cards_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        card_action_buttons_frame = ctk.CTkFrame(cards_main_frame); card_action_buttons_frame.pack(fill="x", pady=(0, 10), padx=5, anchor="nw")
+        self.add_card_button = ctk.CTkButton(card_action_buttons_frame, text="Adicionar Cartão", command=self._on_add_card_button_click); self.add_card_button.pack(side="left", padx=5, pady=5)
+        self.edit_card_button = ctk.CTkButton(card_action_buttons_frame, text="Editar Cartão", command=self._on_edit_card_button_click, state="disabled"); self.edit_card_button.pack(side="left", padx=5, pady=5)
+        self.remove_card_button = ctk.CTkButton(card_action_buttons_frame, text="Remover Cartão", command=self._on_remove_card_button_click, state="disabled"); self.remove_card_button.pack(side="left", padx=5, pady=5)
+        cards_content_frame = ctk.CTkFrame(cards_main_frame, fg_color="transparent"); cards_content_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        cards_content_frame.grid_columnconfigure(0, weight=1); cards_content_frame.grid_columnconfigure(1, weight=2); cards_content_frame.grid_rowconfigure(0, weight=1)    
+        cards_list_block_frame = ctk.CTkFrame(cards_content_frame, fg_color=("gray90","gray17")); cards_list_block_frame.grid(row=0, column=0, sticky="nsew", padx=(0,5), pady=0)
+        ctk.CTkLabel(cards_list_block_frame, text="Meus Cartões", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(10,5), padx=10, anchor="nw")
+        self.cards_list_scrollframe = ctk.CTkScrollableFrame(cards_list_block_frame, label_text="", fg_color="transparent"); self.cards_list_scrollframe.pack(fill="both", expand=True, padx=5, pady=5)
+        self.cards_list_grid_container = ctk.CTkFrame(self.cards_list_scrollframe, fg_color="transparent"); self.cards_list_grid_container.pack(fill="x", expand=True)
+        self.card_list_col_config = [{"weight":1, "minsize": 120, "text":"Nome", "anchor":"w"}, {"weight":1, "minsize": 100, "text":"Bandeira", "anchor":"w"}]
+        for i,cfg in enumerate(self.card_list_col_config):
+            self.cards_list_grid_container.grid_columnconfigure(i,weight=cfg["weight"],minsize=cfg["minsize"]) 
+            h_lbl=ctk.CTkLabel(self.cards_list_grid_container,text=cfg["text"],font=ctk.CTkFont(weight="bold"),anchor=cfg["anchor"],fg_color=("gray80","gray25"),padx=5,pady=3)
+            h_lbl.grid(row=0,column=i,padx=(0,1 if i<len(self.card_list_col_config)-1 else 0),pady=(0,1),sticky="ew")
+        
+        self.invoice_details_block_frame = ctk.CTkFrame(cards_content_frame, fg_color=("gray90","gray17"))
+        self.invoice_details_block_frame.grid(row=0, column=1, sticky="nsew", padx=(5,0), pady=0)
+        self.invoice_details_block_frame.grid_remove() 
+        
+        invoice_action_buttons_frame = ctk.CTkFrame(self.invoice_details_block_frame, fg_color="transparent")
+        invoice_action_buttons_frame.pack(pady=(10,0), padx=10, fill="x", anchor="nw")
+        self.add_invoice_button = ctk.CTkButton(invoice_action_buttons_frame, text="Adicionar Fatura", command=self._on_add_invoice_button_click)
+        self.add_invoice_button.pack(side="left", padx=(0,5), pady=5)
+        self.edit_invoice_button = ctk.CTkButton(invoice_action_buttons_frame, text="Editar Fatura", state="disabled", command=self._on_edit_invoice_button_click)
+        self.edit_invoice_button.pack(side="left", padx=5, pady=5)
+        self.remove_invoice_button = ctk.CTkButton(invoice_action_buttons_frame, text="Remover Fatura", state="disabled", command=self._on_remove_invoice_button_click)
+        self.remove_invoice_button.pack(side="left", padx=5, pady=5)
+
+        self.year_tab_view_container = ctk.CTkFrame(self.invoice_details_block_frame, fg_color="transparent", height=50) 
+        self.year_tab_view_container.pack(pady=(5,0), padx=10, fill="x", anchor="n")
+        self.year_tab_view_container.pack_propagate(False)
+        self.year_tab_view = None 
+
+        self.invoice_details_scrollframe = ctk.CTkScrollableFrame(self.invoice_details_block_frame, label_text="", fg_color="transparent")
+        self.invoice_details_scrollframe.pack(fill="both", expand=True, padx=5, pady=(0,10))
+        self.invoice_details_grid_container = ctk.CTkFrame(self.invoice_details_scrollframe, fg_color="transparent")
+        self.invoice_details_grid_container.pack(fill="both", expand=True)
+
+        months = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+        for i,m_name in enumerate(months):
+            self.invoice_details_grid_container.grid_columnconfigure(i, weight=1, minsize=70) 
+            month_header_frame = ctk.CTkFrame(self.invoice_details_grid_container, fg_color=("gray80", "gray25"), corner_radius=0)
+            month_header_frame.grid(row=0, column=i, padx=(0,1 if i < len(months)-1 else 0), pady=(0,1), sticky="nsew")
+            ctk.CTkLabel(month_header_frame, text=m_name, font=ctk.CTkFont(weight="bold")).pack(padx=2, pady=5, fill="both", expand=True)
+        self._clear_invoice_details_panel()     
+
+    def _load_initial_debits_data(self):
+        today=date.today();som=today.replace(day=1)
+        if som.month==12:eom=som.replace(year=som.year+1,month=1,day=1)-timedelta(days=1)
+        else:eom=som.replace(month=som.month+1,day=1)-timedelta(days=1)
+        s,e=som.strftime("%Y-%m-%d"),eom.strftime("%Y-%m-%d")
+        if hasattr(self,'debits_start_date_entry'):
+            self.debits_start_date_entry.delete(0,ctk.END);self.debits_start_date_entry.insert(0,s)
+            self.debits_end_date_entry.delete(0,ctk.END);self.debits_end_date_entry.insert(0,e)
+        self._load_and_display_debits(s,e)
+
+    def _load_and_display_debits(self,start_date=None,end_date=None):
+        for w in self.debits_table_grid_container.winfo_children():
+            if w.grid_info().get("row",0)>=2:w.destroy()
+        tx=db_manager.get_transactions('Débito',start_date,end_date)
+        if not tx:ctk.CTkLabel(self.debits_table_grid_container,text="Nenhum débito.").grid(row=2,column=0,columnspan=len(self.debit_col_config),pady=10);return
+        r=2
+        for t_id,d_val,v,cat,o in tx:
+            fg=("gray98","gray22") if r%2==0 else ("gray92","gray18")
+            details=[(d_val,0),(f"R$ {v:.2f}",1),(cat,2),(o,3)]
+            for col,(txt,c_idx) in enumerate(details):
+                cf=ctk.CTkFrame(self.debits_table_grid_container,fg_color=fg,corner_radius=0);cf.grid(row=r,column=col,sticky="nsew")
+                wl=self.debit_col_config[c_idx]["minsize"]-10 if c_idx==3 else 0
+                ctk.CTkLabel(cf,text=txt,anchor=self.debit_col_config[c_idx]["anchor"],wraplength=wl if wl>0 else 0,justify="left").pack(padx=5,pady=3,fill="both",expand=True)
+            acf=ctk.CTkFrame(self.debits_table_grid_container,fg_color=fg,corner_radius=0);acf.grid(row=r,column=4,sticky="nsew")
+            acf.grid_columnconfigure(0,weight=1);acf.grid_columnconfigure(1,weight=1);acf.grid_rowconfigure(0,weight=1)
+            ctk.CTkButton(acf,text="✎",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id:self._on_edit_debit_button_click(i)).grid(row=0,column=0,padx=(0,2),pady=2,sticky="e")
+            ctk.CTkButton(acf,text="✕",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id,d_txt=o:self._confirm_delete_debit(i,d_txt)).grid(row=0,column=1,padx=(2,0),pady=2,sticky="w")
+            r+=1
+
+    def _on_filter_debits_button_click(self):
+        s,e=self.debits_start_date_entry.get(),self.debits_end_date_entry.get()
+        try:datetime.strptime(s,"%Y-%m-%d");datetime.strptime(e,"%Y-%m-%d")
+        except ValueError:messagebox.showerror("Erro","Data inválida.",parent=self.controller);return
+        self._load_and_display_debits(s,e)
+    def _on_add_debit_button_click(self):
+        if hasattr(self,'dialog_add_edit_debit') and self.dialog_add_edit_debit and self.dialog_add_edit_debit.winfo_exists():self.dialog_add_edit_debit.focus();return
+        self.dialog_add_edit_debit=AddEditDebitDialog(self.controller,self._on_filter_debits_button_click,None)
+    def _on_edit_debit_button_click(self,transaction_id):
+        data=db_manager.get_transaction_by_id(transaction_id)
+        if data:
+            if hasattr(self,'dialog_add_edit_debit') and self.dialog_add_edit_debit and self.dialog_add_edit_debit.winfo_exists():self.dialog_add_edit_debit.focus();return
+            self.dialog_add_edit_debit=AddEditDebitDialog(self.controller,self._on_filter_debits_button_click,data)
+        else:messagebox.showerror("Erro",f"ID {transaction_id} não encontrado.",parent=self.controller)
+    def _confirm_delete_debit(self,transaction_id,desc):
+        d=(desc[:30]+'...') if len(desc)>30 else desc
+        if messagebox.askyesno("Confirmar",f"Excluir débito:\n'{d}'?",parent=self.controller):
+            s,m=db_manager.delete_transaction(transaction_id)
+            if s:messagebox.showinfo("Sucesso",m if m else "Débito excluído.",parent=self.controller);self._on_filter_debits_button_click()
+            else:messagebox.showerror("Erro",m if m else "Não foi possível excluir.",parent=self.controller)
 
     # --- NOVOS MÉTODOS PARA OS COMANDOS DO MENU FERRAMENTAS ---
 
@@ -438,30 +787,6 @@ class MainAppFrame(ctk.CTkFrame):
         self._on_tab_change() 
         print("DEBUG_TABS: _create_tabs - FIM")
 
-    def _on_tab_change(self):
-        selected_tab_name = self.tab_view.get() 
-        print(f"DEBUG: _on_tab_change - Aba selecionada: {selected_tab_name}")
-        if selected_tab_name == "Dashboard":
-             if hasattr(self, '_setup_dashboard_content_or_update'): self._setup_dashboard_content_or_update()
-        elif selected_tab_name == "Créditos":
-            if hasattr(self, '_load_initial_credits_data'): self._load_initial_credits_data()
-        elif selected_tab_name == "Débitos":
-            if hasattr(self, '_load_initial_debits_data'): self._load_initial_debits_data()
-        elif selected_tab_name == "Cartões": 
-            if hasattr(self, '_load_and_display_cards'): self._load_and_display_cards()
-            # Se nenhum cartão estiver selecionado após carregar, oculta painel direito
-            if self.selected_card_id is None and hasattr(self, 'invoice_details_block_frame') and self.invoice_details_block_frame.winfo_ismapped():
-                 self.invoice_details_block_frame.grid_remove()
-                 self._reset_invoice_selection_and_buttons() 
-    
-    def _setup_dashboard_tab(self, tab_dashboard): # ABA DASHBOARD SIMPLIFICADA PARA TESTE
-        print("DEBUG_DASH: _setup_dashboard_tab (SIMPLIFICADO) - INÍCIO")
-        for widget in tab_dashboard.winfo_children(): widget.destroy()
-        test_label = ctk.CTkLabel(
-            tab_dashboard, text="ABA DASHBOARD VISÍVEL!\n(Conteúdo Real Virá Depois)",
-            font=ctk.CTkFont(size=28, weight="bold"), fg_color="purple", text_color="white", corner_radius=10 )
-        test_label.pack(pady=50, padx=50, expand=True, fill="both")
-        print("DEBUG_DASH: _setup_dashboard_tab (SIMPLIFICADO) - Label de teste roxo adicionado.")
 
     def _setup_dashboard_content_or_update(self, selected_year_value_for_cards=None): # Chamado por _on_tab_change para Dashboard
         print("DEBUG_DASH: _setup_dashboard_content_or_update - Chamado.")
@@ -472,193 +797,78 @@ class MainAppFrame(ctk.CTkFrame):
                          font=ctk.CTkFont(size=18)).pack(pady=20, padx=20, expand=True, fill="both")
             print("DEBUG_DASH: Placeholder de conteúdo do dashboard (filtros/gráficos) renderizado.")
         else: print("DEBUG_DASH: ERRO - self.tab_dashboard não encontrado.")
-
-    # --- MÉTODOS DAS ABAS CRÉDITOS E DÉBITOS (COMO ESTAVAM NA VERSÃO ESTÁVEL) ---
-    def _setup_credits_tab(self, tab_credits):
-        credits_main_frame = ctk.CTkFrame(tab_credits, fg_color="transparent"); credits_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        filter_add_frame = ctk.CTkFrame(credits_main_frame); filter_add_frame.pack(fill="x", pady=(0,10), padx=5)
-        ctk.CTkLabel(filter_add_frame, text="Data Inicial:").pack(side="left", padx=(5,0), pady=5)
-        self.credits_start_date_entry = ctk.CTkEntry(filter_add_frame, placeholder_text="YYYY-MM-DD", width=120); self.credits_start_date_entry.pack(side="left", padx=(0,10), pady=5)
-        ctk.CTkLabel(filter_add_frame, text="Data Final:").pack(side="left", padx=(5,0), pady=5)
-        self.credits_end_date_entry = ctk.CTkEntry(filter_add_frame, placeholder_text="YYYY-MM-DD", width=120); self.credits_end_date_entry.pack(side="left", padx=(0,10), pady=5)
-        ctk.CTkButton(filter_add_frame, text="Filtrar", width=80, command=self._on_filter_credits_button_click).pack(side="left", padx=5, pady=5)
-        ctk.CTkButton(filter_add_frame, text="Adicionar Crédito", command=self._on_add_credit_button_click).pack(side="right", padx=5, pady=5)
-        self.credits_table_scrollframe = ctk.CTkScrollableFrame(credits_main_frame, label_text="Registros de Crédito"); self.credits_table_scrollframe.pack(fill="both", expand=True, padx=5, pady=5)
-        self.credits_table_grid_container = ctk.CTkFrame(self.credits_table_scrollframe, fg_color=("gray95", "gray20")); self.credits_table_grid_container.pack(fill="both", expand=True)
-        self.credit_col_config = [{"weight":0,"minsize":100,"text":"Data","anchor":"w"},{"weight":0,"minsize":120,"text":"Valor","anchor":"e"},{"weight":1,"minsize":130,"text":"Categoria","anchor":"w"},{"weight":2,"minsize":150,"text":"Observação","anchor":"w"},{"weight":0,"minsize":80,"text":"Ações","anchor":"center"}]
-        for i,cfg in enumerate(self.credit_col_config):
-            self.credits_table_grid_container.grid_columnconfigure(i,weight=cfg["weight"],minsize=cfg["minsize"])
-            hcf=ctk.CTkFrame(self.credits_table_grid_container,fg_color=("gray85","gray25"),corner_radius=0);hcf.grid(row=0,column=i,sticky="nsew")
-            ctk.CTkLabel(hcf,text=cfg["text"],font=ctk.CTkFont(weight="bold"),anchor=cfg["anchor"]).pack(padx=5,pady=5,fill="both",expand=True)
-        ctk.CTkFrame(self.credits_table_grid_container,height=1,fg_color=("gray70","gray30")).grid(row=1,column=0,columnspan=len(self.credit_col_config),sticky="ew",pady=(0,5))
-
-    def _load_initial_credits_data(self):
-        today=date.today();som=today.replace(day=1)
-        if som.month==12:eom=som.replace(year=som.year+1,month=1,day=1)-timedelta(days=1)
-        else:eom=som.replace(month=som.month+1,day=1)-timedelta(days=1)
-        s,e=som.strftime("%Y-%m-%d"),eom.strftime("%Y-%m-%d")
-        if hasattr(self,'credits_start_date_entry'):
-            self.credits_start_date_entry.delete(0,ctk.END);self.credits_start_date_entry.insert(0,s)
-            self.credits_end_date_entry.delete(0,ctk.END);self.credits_end_date_entry.insert(0,e)
-        self._load_and_display_credits(s,e)
-
-    def _load_and_display_credits(self,start_date=None,end_date=None):
-        for w in self.credits_table_grid_container.winfo_children():
-            if w.grid_info().get("row",0)>=2:w.destroy()
-        tx=db_manager.get_transactions('Crédito',start_date,end_date)
-        if not tx:ctk.CTkLabel(self.credits_table_grid_container,text="Nenhum crédito encontrado.").grid(row=2,column=0,columnspan=len(self.credit_col_config),pady=10);return
-        r=2
-        for t_id,d,v,cat,o in tx:
-            fg=("gray98","gray22") if r%2==0 else ("gray92","gray18")
-            details=[(d,0),(f"R$ {v:.2f}",1),(cat,2),(o,3)]
-            for col,(txt,c_idx) in enumerate(details):
-                cf=ctk.CTkFrame(self.credits_table_grid_container,fg_color=fg,corner_radius=0);cf.grid(row=r,column=col,sticky="nsew")
-                wl=self.credit_col_config[c_idx]["minsize"]-10 if c_idx==3 else 0
-                ctk.CTkLabel(cf,text=txt,anchor=self.credit_col_config[c_idx]["anchor"],wraplength=wl if wl>0 else 0,justify="left").pack(padx=5,pady=3,fill="both",expand=True)
-            acf=ctk.CTkFrame(self.credits_table_grid_container,fg_color=fg,corner_radius=0);acf.grid(row=r,column=4,sticky="nsew")
-            acf.grid_columnconfigure(0,weight=1);acf.grid_columnconfigure(1,weight=1);acf.grid_rowconfigure(0,weight=1)
-            ctk.CTkButton(acf,text="✎",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id:self._on_edit_credit_button_click(i)).grid(row=0,column=0,padx=(0,2),pady=2,sticky="e")
-            ctk.CTkButton(acf,text="✕",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id,d_txt=o:self._confirm_delete_credit(i,d_txt)).grid(row=0,column=1,padx=(2,0),pady=2,sticky="w")
-            r+=1
-            
-    def _on_filter_credits_button_click(self):
-        s,e=self.credits_start_date_entry.get(),self.credits_end_date_entry.get()
-        try:datetime.strptime(s,"%Y-%m-%d");datetime.strptime(e,"%Y-%m-%d")
-        except ValueError:messagebox.showerror("Erro","Data inválida.",parent=self.controller);return
-        self._load_and_display_credits(s,e)
-    def _on_add_credit_button_click(self):
-        if hasattr(self,'dialog_add_edit_credit') and self.dialog_add_edit_credit and self.dialog_add_edit_credit.winfo_exists():self.dialog_add_edit_credit.focus();return
-        self.dialog_add_edit_credit=AddEditCreditDialog(self.controller,self._on_filter_credits_button_click,None)
-    def _on_edit_credit_button_click(self,transaction_id):
-        data=db_manager.get_transaction_by_id(transaction_id)
-        if data:
-            if hasattr(self,'dialog_add_edit_credit') and self.dialog_add_edit_credit and self.dialog_add_edit_credit.winfo_exists():self.dialog_add_edit_credit.focus();return
-            self.dialog_add_edit_credit=AddEditCreditDialog(self.controller,self._on_filter_credits_button_click,data)
-        else:messagebox.showerror("Erro",f"ID {transaction_id} não encontrado.",parent=self.controller)
-    def _confirm_delete_credit(self,transaction_id,desc):
-        d=(desc[:30]+'...') if len(desc)>30 else desc
-        if messagebox.askyesno("Confirmar",f"Excluir crédito:\n'{d}'?",parent=self.controller):
-            if db_manager.delete_transaction(transaction_id):messagebox.showinfo("Sucesso","Crédito excluído.",parent=self.controller);self._on_filter_credits_button_click()
-            else:messagebox.showerror("Erro","Não foi possível excluir.",parent=self.controller)
-
-    def _setup_debits_tab(self, tab_debits):
-        debits_main_frame = ctk.CTkFrame(tab_debits, fg_color="transparent"); debits_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        filter_add_frame = ctk.CTkFrame(debits_main_frame); filter_add_frame.pack(fill="x", pady=(0,10), padx=5)
-        ctk.CTkLabel(filter_add_frame, text="Data Inicial:").pack(side="left", padx=(5,0), pady=5)
-        self.debits_start_date_entry = ctk.CTkEntry(filter_add_frame, placeholder_text="YYYY-MM-DD", width=120); self.debits_start_date_entry.pack(side="left", padx=(0,10), pady=5)
-        ctk.CTkLabel(filter_add_frame, text="Data Final:").pack(side="left", padx=(5,0), pady=5)
-        self.debits_end_date_entry = ctk.CTkEntry(filter_add_frame, placeholder_text="YYYY-MM-DD", width=120); self.debits_end_date_entry.pack(side="left", padx=(0,10), pady=5)
-        ctk.CTkButton(filter_add_frame, text="Filtrar", width=80, command=self._on_filter_debits_button_click).pack(side="left", padx=5, pady=5)
-        ctk.CTkButton(filter_add_frame, text="Adicionar Débito", command=self._on_add_debit_button_click).pack(side="right", padx=5, pady=5)
-        self.debits_table_scrollframe = ctk.CTkScrollableFrame(debits_main_frame, label_text="Registros de Débito"); self.debits_table_scrollframe.pack(fill="both", expand=True, padx=5, pady=5)
-        self.debits_table_grid_container = ctk.CTkFrame(self.debits_table_scrollframe, fg_color=("gray95", "gray20")); self.debits_table_grid_container.pack(fill="both", expand=True)
-        self.debit_col_config = self.credit_col_config 
-        for i,cfg in enumerate(self.debit_col_config):
-            self.debits_table_grid_container.grid_columnconfigure(i,weight=cfg["weight"],minsize=cfg["minsize"])
-            hcf=ctk.CTkFrame(self.debits_table_grid_container,fg_color=("gray85","gray25"),corner_radius=0);hcf.grid(row=0,column=i,sticky="nsew")
-            ctk.CTkLabel(hcf,text=cfg["text"],font=ctk.CTkFont(weight="bold"),anchor=cfg["anchor"]).pack(padx=5,pady=5,fill="both",expand=True)
-        ctk.CTkFrame(self.debits_table_grid_container,height=1,fg_color=("gray70","gray30")).grid(row=1,column=0,columnspan=len(self.debit_col_config),sticky="ew",pady=(0,5))
-
-    def _load_initial_debits_data(self):
-        today=date.today();som=today.replace(day=1)
-        if som.month==12:eom=som.replace(year=som.year+1,month=1,day=1)-timedelta(days=1)
-        else:eom=som.replace(month=som.month+1,day=1)-timedelta(days=1)
-        s,e=som.strftime("%Y-%m-%d"),eom.strftime("%Y-%m-%d")
-        if hasattr(self,'debits_start_date_entry'):
-            self.debits_start_date_entry.delete(0,ctk.END);self.debits_start_date_entry.insert(0,s)
-            self.debits_end_date_entry.delete(0,ctk.END);self.debits_end_date_entry.insert(0,e)
-        self._load_and_display_debits(s,e)
-
-    def _load_and_display_debits(self,start_date=None,end_date=None):
-        for w in self.debits_table_grid_container.winfo_children():
-            if w.grid_info().get("row",0)>=2:w.destroy()
-        tx=db_manager.get_transactions('Débito',start_date,end_date)
-        if not tx:ctk.CTkLabel(self.debits_table_grid_container,text="Nenhum débito.").grid(row=2,column=0,columnspan=len(self.debit_col_config),pady=10);return
-        r=2
-        for t_id,d_val,v,cat,o in tx:
-            fg=("gray98","gray22") if r%2==0 else ("gray92","gray18")
-            details=[(d_val,0),(f"R$ {v:.2f}",1),(cat,2),(o,3)]
-            for col,(txt,c_idx) in enumerate(details):
-                cf=ctk.CTkFrame(self.debits_table_grid_container,fg_color=fg,corner_radius=0);cf.grid(row=r,column=col,sticky="nsew")
-                wl=self.debit_col_config[c_idx]["minsize"]-10 if c_idx==3 else 0
-                ctk.CTkLabel(cf,text=txt,anchor=self.debit_col_config[c_idx]["anchor"],wraplength=wl if wl>0 else 0,justify="left").pack(padx=5,pady=3,fill="both",expand=True)
-            acf=ctk.CTkFrame(self.debits_table_grid_container,fg_color=fg,corner_radius=0);acf.grid(row=r,column=4,sticky="nsew")
-            acf.grid_columnconfigure(0,weight=1);acf.grid_columnconfigure(1,weight=1);acf.grid_rowconfigure(0,weight=1)
-            ctk.CTkButton(acf,text="✎",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id:self._on_edit_debit_button_click(i)).grid(row=0,column=0,padx=(0,2),pady=2,sticky="e")
-            ctk.CTkButton(acf,text="✕",width=28,height=28,fg_color="transparent",text_color=("gray10","gray90"),hover_color=("gray70","gray30"),command=lambda i=t_id,d_txt=o:self._confirm_delete_debit(i,d_txt)).grid(row=0,column=1,padx=(2,0),pady=2,sticky="w")
-            r+=1
-
-    def _on_filter_debits_button_click(self):
-        s,e=self.debits_start_date_entry.get(),self.debits_end_date_entry.get()
-        try:datetime.strptime(s,"%Y-%m-%d");datetime.strptime(e,"%Y-%m-%d")
-        except ValueError:messagebox.showerror("Erro","Data inválida.",parent=self.controller);return
-        self._load_and_display_debits(s,e)
-    def _on_add_debit_button_click(self):
-        if hasattr(self,'dialog_add_edit_debit') and self.dialog_add_edit_debit and self.dialog_add_edit_debit.winfo_exists():self.dialog_add_edit_debit.focus();return
-        self.dialog_add_edit_debit=AddEditDebitDialog(self.controller,self._on_filter_debits_button_click,None)
-    def _on_edit_debit_button_click(self,transaction_id):
-        data=db_manager.get_transaction_by_id(transaction_id)
-        if data:
-            if hasattr(self,'dialog_add_edit_debit') and self.dialog_add_edit_debit and self.dialog_add_edit_debit.winfo_exists():self.dialog_add_edit_debit.focus();return
-            self.dialog_add_edit_debit=AddEditDebitDialog(self.controller,self._on_filter_debits_button_click,data)
-        else:messagebox.showerror("Erro",f"ID {transaction_id} não encontrado.",parent=self.controller)
-    def _confirm_delete_debit(self,transaction_id,desc):
-        d=(desc[:30]+'...') if len(desc)>30 else desc
-        if messagebox.askyesno("Confirmar",f"Excluir débito:\n'{d}'?",parent=self.controller):
-            s,m=db_manager.delete_transaction(transaction_id)
-            if s:messagebox.showinfo("Sucesso",m if m else "Débito excluído.",parent=self.controller);self._on_filter_debits_button_click()
-            else:messagebox.showerror("Erro",m if m else "Não foi possível excluir.",parent=self.controller)
-
-    # --- ABA CARTÕES (COM CORREÇÕES E PREPARAÇÃO PARA EDIÇÃO DE FATURA) ---
-    def _setup_cards_tab(self, tab_cards):
-        # ... (Como no Passo 66, incluindo os botões de fatura)
-        cards_main_frame = ctk.CTkFrame(tab_cards, fg_color="transparent"); cards_main_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        card_action_buttons_frame = ctk.CTkFrame(cards_main_frame); card_action_buttons_frame.pack(fill="x", pady=(0, 10), padx=5, anchor="nw")
-        self.add_card_button = ctk.CTkButton(card_action_buttons_frame, text="Adicionar Cartão", command=self._on_add_card_button_click); self.add_card_button.pack(side="left", padx=5, pady=5)
-        self.edit_card_button = ctk.CTkButton(card_action_buttons_frame, text="Editar Cartão", command=self._on_edit_card_button_click, state="disabled"); self.edit_card_button.pack(side="left", padx=5, pady=5)
-        self.remove_card_button = ctk.CTkButton(card_action_buttons_frame, text="Remover Cartão", command=self._on_remove_card_button_click, state="disabled"); self.remove_card_button.pack(side="left", padx=5, pady=5)
-        cards_content_frame = ctk.CTkFrame(cards_main_frame, fg_color="transparent"); cards_content_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        cards_content_frame.grid_columnconfigure(0, weight=1); cards_content_frame.grid_columnconfigure(1, weight=2); cards_content_frame.grid_rowconfigure(0, weight=1)    
-        cards_list_block_frame = ctk.CTkFrame(cards_content_frame, fg_color=("gray90","gray17")); cards_list_block_frame.grid(row=0, column=0, sticky="nsew", padx=(0,5), pady=0)
-        ctk.CTkLabel(cards_list_block_frame, text="Meus Cartões", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(10,5), padx=10, anchor="nw")
-        self.cards_list_scrollframe = ctk.CTkScrollableFrame(cards_list_block_frame, label_text="", fg_color="transparent"); self.cards_list_scrollframe.pack(fill="both", expand=True, padx=5, pady=5)
-        self.cards_list_grid_container = ctk.CTkFrame(self.cards_list_scrollframe, fg_color="transparent"); self.cards_list_grid_container.pack(fill="x", expand=True)
-        self.card_list_col_config = [{"weight":1, "minsize": 120, "text":"Nome", "anchor":"w"}, {"weight":1, "minsize": 100, "text":"Bandeira", "anchor":"w"}]
-        for i,cfg in enumerate(self.card_list_col_config):
-            self.cards_list_grid_container.grid_columnconfigure(i,weight=cfg["weight"],minsize=cfg["minsize"]) 
-            h_lbl=ctk.CTkLabel(self.cards_list_grid_container,text=cfg["text"],font=ctk.CTkFont(weight="bold"),anchor=cfg["anchor"],fg_color=("gray80","gray25"),padx=5,pady=3)
-            h_lbl.grid(row=0,column=i,padx=(0,1 if i<len(self.card_list_col_config)-1 else 0),pady=(0,1),sticky="ew")
         
-        self.invoice_details_block_frame = ctk.CTkFrame(cards_content_frame, fg_color=("gray90","gray17"))
-        self.invoice_details_block_frame.grid(row=0, column=1, sticky="nsew", padx=(5,0), pady=0)
-        self.invoice_details_block_frame.grid_remove() 
-        
-        invoice_action_buttons_frame = ctk.CTkFrame(self.invoice_details_block_frame, fg_color="transparent")
-        invoice_action_buttons_frame.pack(pady=(10,0), padx=10, fill="x", anchor="nw")
-        self.add_invoice_button = ctk.CTkButton(invoice_action_buttons_frame, text="Adicionar Fatura", command=self._on_add_invoice_button_click)
-        self.add_invoice_button.pack(side="left", padx=(0,5), pady=5)
-        self.edit_invoice_button = ctk.CTkButton(invoice_action_buttons_frame, text="Editar Fatura", state="disabled", command=self._on_edit_invoice_button_click)
-        self.edit_invoice_button.pack(side="left", padx=5, pady=5)
-        self.remove_invoice_button = ctk.CTkButton(invoice_action_buttons_frame, text="Remover Fatura", state="disabled", command=self._on_remove_invoice_button_click)
-        self.remove_invoice_button.pack(side="left", padx=5, pady=5)
+    def _create_or_update_pie_chart_expenses(self, data, parent_frame):
+       # print(f"DEBUG_DASH_CHART1: Criando/atualizando gráfico de pizza. Dados: {len(data) if data else 'Sem dados'}")
+       if hasattr(self, 'canvas_chart1') and self.canvas_chart1:
+           self.canvas_chart1.get_tk_widget().destroy(); self.canvas_chart1 = None
+       for widget in parent_frame.winfo_children(): widget.destroy()
 
-        self.year_tab_view_container = ctk.CTkFrame(self.invoice_details_block_frame, fg_color="transparent", height=50) 
-        self.year_tab_view_container.pack(pady=(5,0), padx=10, fill="x", anchor="n")
-        self.year_tab_view_container.pack_propagate(False)
-        self.year_tab_view = None 
+       if not data:
+           ctk.CTkLabel(parent_frame, text="Sem dados de despesa para o período.").pack(padx=10, pady=10, expand=True, fill="both")
+           return
 
-        self.invoice_details_scrollframe = ctk.CTkScrollableFrame(self.invoice_details_block_frame, label_text="", fg_color="transparent")
-        self.invoice_details_scrollframe.pack(fill="both", expand=True, padx=5, pady=(0,10))
-        self.invoice_details_grid_container = ctk.CTkFrame(self.invoice_details_scrollframe, fg_color="transparent")
-        self.invoice_details_grid_container.pack(fill="both", expand=True)
+       labels = [item[0] for item in data]      
+       hex_colors_from_db = [item[1] if (item[1] and item[1].startswith("#") and len(item[1]) == 7) else "#808080" for item in data]       
+       sizes = [item[2] for item in data]        
+       
+       current_theme_mode = ctk.get_appearance_mode()
+       if current_theme_mode == "Dark":
+           safe_fig_bg_color = "#2B2B2B"; safe_text_color = "#DCE4EE"   
+       else: 
+           safe_fig_bg_color = "#EBEBEB"; safe_text_color = "#1F1F1F"   
+       pie_edge_color = safe_fig_bg_color # CORRIGIDO: usa pie_edge_color
 
-        months = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-        for i,m_name in enumerate(months):
-            self.invoice_details_grid_container.grid_columnconfigure(i, weight=1, minsize=70) 
-            month_header_frame = ctk.CTkFrame(self.invoice_details_grid_container, fg_color=("gray80", "gray25"), corner_radius=0)
-            month_header_frame.grid(row=0, column=i, padx=(0,1 if i < len(months)-1 else 0), pady=(0,1), sticky="nsew")
-            ctk.CTkLabel(month_header_frame, text=m_name, font=ctk.CTkFont(weight="bold")).pack(padx=2, pady=5, fill="both", expand=True)
-        self._clear_invoice_details_panel() 
+       def make_autopct(values_for_autopct):
+           def my_autopct(pct):
+               if sum(values_for_autopct) == 0: return f'{pct:.1f}%\n(R$ 0.00)'
+               absolute_value = pct/100.*sum(values_for_autopct)
+               return f'{pct:.1f}%\n(R$ {absolute_value:.2f})'
+           return my_autopct
+
+       try:
+           fig = Figure(figsize=(5, 4), dpi=90, facecolor=safe_fig_bg_color) # Ajustado figsize e dpi
+           ax = fig.add_subplot(111); ax.set_facecolor(safe_fig_bg_color)
+           valid_mpl_colors = []; 
+           for color_hex_val in hex_colors_from_db:
+               try: mcolors.to_rgba(color_hex_val); valid_mpl_colors.append(color_hex_val[:7]) 
+               except ValueError: valid_mpl_colors.append("#808080") 
+           if not valid_mpl_colors and sizes : valid_mpl_colors = None 
+
+           if not sizes: 
+               ctk.CTkLabel(parent_frame, text="Sem dados para exibir no gráfico.").pack(padx=10, pady=10, expand=True, fill="both"); return
+
+           wedges, texts_pie, autotexts_pie = ax.pie(
+               sizes, colors=valid_mpl_colors, 
+               autopct=make_autopct(sizes), 
+               startangle=90, pctdistance=0.75, 
+               wedgeprops={'edgecolor': pie_edge_color, 'linewidth': 0.5} # CORRIGIDO AQUI
+           )
+           for autotext_item in autotexts_pie: 
+               autotext_item.set_color(safe_text_color); autotext_item.set_fontsize(9); autotext_item.set_fontweight('normal')
+           
+           centre_circle = plt.Circle((0,0),0.60,fc=safe_fig_bg_color)
+           ax.add_artist(centre_circle); ax.axis('equal')  
+           
+           if labels and 0<len(labels)<=7:
+                legend_ncol = 1; legend_loc = 'center left'; bbox_anchor = (1.05, 0.5); fig_r_margin = 0.60
+                if len(labels)>4:legend_loc = 'upper center'; bbox_anchor = (0.5, -0.05); legend_ncol = min(3, len(labels)); fig_r_margin = 0.95
+                ax.legend(wedges,[f"{l} (R$ {s:.2f})" for l,s in zip(labels,sizes)],title="Categorias",loc=legend_loc,bbox_to_anchor=bbox_anchor,fontsize=8,labelcolor=safe_text_color,title_fontproperties={'size':9,'weight':'bold'},facecolor=safe_fig_bg_color,edgecolor=safe_fig_bg_color,frameon=False,ncol=legend_ncol)
+                fig.subplots_adjust(left=0.05,right=fig_r_margin,top=0.95,bottom=0.28 if legend_loc=='upper center' and legend_ncol > 1 else 0.20 if legend_loc=='upper center' else 0.1)
+           else:fig.subplots_adjust(left=0.05,right=0.95,top=0.95,bottom=0.05)
+
+           self.canvas_chart1 = FigureCanvasTkAgg(fig, master=parent_frame)
+           self.canvas_chart1.draw()
+           self.canvas_chart1.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True, padx=0, pady=0)
+           print(f"DEBUG_DASH_CHART1: Gráfico de pizza de despesas criado/atualizado.")
+       except Exception as e:
+           print(f"DEBUG_DASH_CHART1: Erro crítico ao criar/desenhar gráfico de pizza: {e}")
+           import traceback; traceback.print_exc() 
+           ctk.CTkLabel(parent_frame, text=f"Erro gráfico:\n{str(e)[:100]}").pack(padx=10,pady=10)
+
+
+
+
 
     def _on_add_card_button_click(self):
         if hasattr(self,'dialog_add_edit_card') and self.dialog_add_edit_card and self.dialog_add_edit_card.winfo_exists():self.dialog_add_edit_card.focus();return
@@ -881,24 +1091,54 @@ class MainAppFrame(ctk.CTkFrame):
         CTkMessagebox(master=self.controller, title="Sobre Confia", 
                       message="Confia - Seu App de Controle Financeiro Pessoal\nVersão 0.1.0\nDesenvolvido com Python e CustomTkinter")
 
+    # --- Callbacks de Menu e Placeholders para abas restantes ---
+    def _setup_calculations_tab(self, tab): label = ctk.CTkLabel(tab, text="Conteúdo de Cálculos Aqui"); label.pack(pady=20, padx=20)
+    def _setup_reports_tab(self, tab): label = ctk.CTkLabel(tab, text="Conteúdo de Relatórios/Insights Aqui"); label.pack(pady=20, padx=20)
+    def _criar_novo_usuario(self): print("MainAppFrame: Ação 'Criar Novo Usuário'")
+    def _alterar_senha(self): print("MainAppFrame: Ação 'Alterar Senha'")
+    def _on_generate_test_data_click(self): 
+        if messagebox.askyesno("Gerar Dados de Teste", "Apagar dados existentes (exceto categorias) e gerar novos dados de teste?", icon='warning', parent=self.controller):
+            db_manager.delete_all_transactional_data(); db_manager.generate_test_data()
+            messagebox.showinfo("Sucesso", "Novos dados de teste gerados!", parent=self.controller); self._refresh_all_views()
+    def _on_delete_test_data_click(self):
+        if messagebox.askyesno("Apagar Dados de Teste", "Apagar TODAS as transações, cartões e faturas?\nCategorias NÃO serão afetadas.", icon='warning', parent=self.controller):
+            db_manager.delete_all_transactional_data()
+            messagebox.showinfo("Sucesso", "Dados transacionais apagados.", parent=self.controller); self._refresh_all_views()
+    def _refresh_all_views(self):
+        print("Atualizando todas as visualizações..."); 
+        if hasattr(self,'_load_initial_credits_data'):self._load_initial_credits_data()
+        if hasattr(self,'_load_initial_debits_data'):self._load_initial_debits_data()
+        if hasattr(self,'_load_and_display_cards'):self._load_and_display_cards()
+        if hasattr(self,'_update_all_dashboard_charts'):self._update_all_dashboard_charts()
+        print("Visualizações atualizadas.")
+    def _sobre_confia(self):
+        from customtkinter import CTkMessagebox 
+        CTkMessagebox(master=self.controller, title="Sobre Confia", message="Confia - App Financeiro\nVersão 0.2.0")
+
+# --- Bloco if __name__ == '__main__' (COMO NO PASSO 88) ---
 if __name__ == '__main__':
     class MockAppController(ctk.CTk):
         def __init__(self):
-            super().__init__(); self.title("Teste MainAppFrame - Aba Cartões"); self.geometry("1200x700"); ctk.set_appearance_mode("light")
-            if not os.path.exists(db_manager.DATABASE_DIR): os.makedirs(db_manager.DATABASE_DIR)
+            super().__init__(); self.title("Teste MainAppFrame - Dashboard"); self.geometry("1200x800"); ctk.set_appearance_mode("light")
             db_path = db_manager.DATABASE_PATH
+            if not os.path.exists(db_manager.DATABASE_DIR): os.makedirs(db_manager.DATABASE_DIR)
             if os.path.exists(db_path): 
                 try: os.remove(db_path)
-                except PermissionError: print(f"AVISO: Não foi possível remover {db_path}. Pode estar em uso.")
+                except PermissionError: print(f"AVISO: Não foi possível remover {db_path}.")
                 except Exception as e: print(f"Erro ao remover DB: {e}")
             db_manager.initialize_database()
-            card_test_id = db_manager.add_card(nome="Cartão Teste UI", bandeira="Mastercard", cor="#FF6347", banco="NUBANK")
-            if card_test_id:
-                db_manager.upsert_fatura(card_test_id, date.today().year, 1, 100.50) 
-                db_manager.upsert_fatura(card_test_id, date.today().year, 2, 75.20)  
+            # Adicionar dados de teste para popular os gráficos
+            cat_alim_id = next((c[0] for c in db_manager.get_categories_by_type("Débito") if c[1] == "Alimentação"), 5)
+            cat_trans_id = next((c[0] for c in db_manager.get_categories_by_type("Débito") if c[1] == "Transporte"), 6)
+            cat_sal_id = next((c[0] for c in db_manager.get_categories_by_type("Crédito") if c[1] == "Salário"), 1)
+            if cat_alim_id: db_manager.add_transaction(date.today().strftime("%Y-%m-%d"), "Supermercado Mês", 230.55, "Débito", cat_alim_id) 
+            if cat_trans_id: db_manager.add_transaction((date.today() - timedelta(days=3)).strftime("%Y-%m-%d"), "Combustível", 150.00, "Débito", cat_trans_id) 
+            if cat_sal_id: db_manager.add_transaction(date.today().strftime("%Y-%m-%d"), "Salário Maio", 3500.00, "Crédito", cat_sal_id)
+            card_id = db_manager.add_card(nome="Visa Platinum Teste", bandeira="Visa", cor="#1E90FF")
+            if card_id: db_manager.upsert_fatura(card_id, date.today().year, 1, 250.55)
             container=ctk.CTkFrame(self,fg_color="transparent"); container.pack(fill="both",expand=True)
             self.main_frame_instance = MainAppFrame(parent=container, controller=self); self.main_frame_instance.pack(fill="both",expand=True)
-            self.main_frame_instance.tab_view.set("Cartões") 
+            # A aba Dashboard já deve ser a padrão pelo _create_tabs
         def _on_app_closing(self): self.destroy()
         def show_frame(self, name): print(f"Mock: show {name}")
     MockAppController().mainloop()
