@@ -1,7 +1,8 @@
 # C:\Confia\confia_app\db_manager.py
 import sqlite3 
 import os      
-from datetime import date # Importação necessária para date.today()
+from datetime import date, timedelta, datetime # Adicionado datetime completo
+import random # Novo import
 
 DATABASE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'database')
 DATABASE_NAME = 'confia.db'
@@ -464,3 +465,164 @@ if __name__ == '__main__':
         print(f"Nenhuma fatura consolidada encontrada para {ano_teste_consolidado} ou erro na busca.")
 
     # Outros testes podem ser adicionados ou mantidos aqui...
+    
+def delete_all_transactional_data():
+    """
+    Exclui TODAS as transações, TODAS as faturas de cartão e TODOS os cartões.
+    Categorias NÃO são afetadas.
+    Retorna True se bem-sucedido, False caso contrário.
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        # A ordem importa devido às chaves estrangeiras (embora ON DELETE CASCADE e SET NULL ajudem)
+        # 1. Excluir todas as transações
+        cursor.execute("DELETE FROM transacoes")
+        print(f"{cursor.rowcount} transações excluídas.")
+        
+        # 2. Excluir todas as faturas de cartão (seriam excluídas por CASCADE ao deletar cartões, mas fazemos explicitamente para clareza)
+        cursor.execute("DELETE FROM faturas_cartao")
+        print(f"{cursor.rowcount} faturas de cartão excluídas.")
+
+        # 3. Excluir todos os cartões
+        cursor.execute("DELETE FROM cartoes")
+        print(f"{cursor.rowcount} cartões excluídos.")
+        
+        conn.commit()
+        print("Todos os dados transacionais (transações, faturas, cartões) foram excluídos.")
+        return True
+    except sqlite3.Error as e:
+        print(f"Erro ao excluir dados transacionais: {e}")
+        conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def generate_test_data():
+    """
+    Gera um conjunto de dados de teste: cartões, faturas, créditos e débitos.
+    É recomendável chamar delete_all_transactional_data() antes para evitar duplicatas
+    ou conflitos se esta função for chamada múltiplas vezes.
+    """
+    print("Iniciando geração de dados de teste...")
+    
+    # --- 1. Adicionar Cartões de Teste ---
+    cards_to_add = [
+        {"nome": "Cartão Principal Azul", "bandeira": "Visa", "cor": "#3B8ED0", "limite": 5000, "dia_fechamento": 20, "dia_vencimento": 28},
+        {"nome": "Cartão Viagem Verde", "bandeira": "Mastercard", "cor": "#2ECC71", "limite": 10000, "dia_fechamento": 15, "dia_vencimento": 25}
+    ]
+    card_ids = []
+    for card_data in cards_to_add:
+        # Adiciona banco como None, pois removemos do formulário principal
+        card_id = add_card(card_data["nome"], card_data["bandeira"], card_data["cor"], 
+                           card_data["limite"], card_data["dia_fechamento"], card_data["dia_vencimento"], banco=None)
+        if card_id:
+            card_ids.append(card_id)
+    
+    if not card_ids:
+        print("Não foi possível adicionar cartões de teste. Geração de dados de teste interrompida para faturas.")
+        # Ainda tenta gerar transações gerais
+    
+    # --- 2. Gerar Faturas para os Cartões de Teste ---
+    today = date.today()
+    current_year = today.year
+    previous_year = current_year - 1
+    
+    for card_id in card_ids:
+        # Faturas para o ano anterior completo
+        for month in range(1, 13):
+            valor = round(random.uniform(50.0, 800.0), 2)
+            upsert_fatura(card_id, previous_year, month, valor)
+        
+        # Faturas para o ano atual, até o mês anterior ao atual
+        # (ou até o mês atual se preferir simular uma fatura já fechada)
+        for month in range(1, today.month + 1): # Inclui o mês atual
+            valor = round(random.uniform(70.0, 900.0), 2)
+            upsert_fatura(card_id, current_year, month, valor)
+    print(f"{len(card_ids) * (12 + today.month)} faturas de teste geradas (aprox).")
+
+    # --- 3. Gerar Transações de Crédito ---
+    credit_categories = get_categories_by_type('Crédito')
+    if not credit_categories:
+        print("Nenhuma categoria de crédito encontrada. Pulando geração de créditos de teste.")
+    else:
+        num_credits_to_add = min(len(credit_categories), 3) # Pelo menos 3 ou o total de categorias de crédito
+        selected_credit_categories = random.sample(credit_categories, num_credits_to_add)
+        
+        for i in range(num_credits_to_add): # Garante pelo menos uma transação por categoria selecionada
+            cat_id = selected_credit_categories[i][0] # ID da categoria
+            desc = f"Renda de Teste {i+1} ({selected_credit_categories[i][1]})"
+            val = round(random.uniform(1000.0, 7000.0), 2)
+            # Data aleatória nos últimos 2 meses
+            day_offset = random.randint(1, 60)
+            trans_date = (today - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+            add_transaction(trans_date, desc, val, 'Crédito', cat_id)
+        print(f"{num_credits_to_add} transações de crédito de teste geradas.")
+
+    # --- 4. Gerar Transações de Débito ---
+    debit_categories = get_categories_by_type('Débito')
+    if not debit_categories:
+        print("Nenhuma categoria de débito encontrada. Pulando geração de débitos de teste.")
+    else:
+        num_debits_to_add = min(len(debit_categories), 10) # Até 10 ou o total de categorias de débito
+        selected_debit_categories = random.sample(debit_categories, num_debits_to_add)
+
+        for i in range(num_debits_to_add): # Garante pelo menos uma transação por categoria selecionada
+            cat_id = selected_debit_categories[i][0]
+            desc = f"Gasto de Teste {i+1} ({selected_debit_categories[i][1]})"
+            val = round(random.uniform(10.0, 300.0), 2)
+            day_offset = random.randint(1, 60)
+            trans_date = (today - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+            add_transaction(trans_date, desc, val, 'Débito', cat_id)
+        print(f"{num_debits_to_add} transações de débito de teste geradas.")
+        
+    print("Geração de dados de teste concluída.")
+
+# Bloco if __name__ == '__main__': para testes
+if __name__ == '__main__':
+    db_file_path = DATABASE_PATH
+    if os.path.exists(db_file_path):
+        print(f"Removendo banco de dados existente para teste completo: {db_file_path}")
+        try:
+            os.remove(db_file_path)
+            print(f"Arquivo de banco de dados '{db_file_path}' removido com sucesso.")
+        except PermissionError:
+             print(f"AVISO: Não foi possível remover {db_file_path}. Pode estar em uso.")
+        except Exception as e:
+            print(f"Erro desconhecido ao tentar remover o banco de dados: {e}")
+    
+    print("\n--- Inicializando Banco de Dados ---")
+    initialize_database() # Cria tabelas e categorias padrão
+
+    print("\n--- Gerando Dados de Teste ---")
+    generate_test_data()
+
+    print("\n--- Verificando Dados Gerados (Exemplos) ---")
+    print("\nCartões de Teste:")
+    for card in get_all_cards(): print(card)
+    
+    print("\nFaturas Consolidadas (Ano Atual):")
+    faturas_consol = get_consolidated_faturas_for_year(date.today().year)
+    for mes, val in faturas_consol.items():
+        if val > 0 : print(f"Mês {mes:02d}: R$ {val:.2f}")
+
+    print("\nTransações de Crédito (Últimas):")
+    for tr in get_transactions('Crédito')[:5]: print(tr) # Mostra as 5 primeiras
+    
+    print("\nTransações de Débito (Últimas):")
+    for tr in get_transactions('Débito')[:5]: print(tr) # Mostra as 5 primeiras
+
+    print("\n--- Apagando Dados Transacionais de Teste ---")
+    delete_all_transactional_data()
+
+    print("\n--- Verificando Após Exclusão ---")
+    print(f"Total de Cartões: {len(get_all_cards())}") # Deve ser 0
+    print(f"Total de Transações de Crédito: {len(get_transactions('Crédito'))}") # Deve ser 0
+    print(f"Total de Transações de Débito: {len(get_transactions('Débito'))}") # Deve ser 0
+    print(f"Faturas Consolidadas (Ano Atual) após exclusão:")
+    faturas_consol_depois = get_consolidated_faturas_for_year(date.today().year)
+    has_faturas = False
+    for mes, val in faturas_consol_depois.items():
+        if val > 0 : print(f"Mês {mes:02d}: R$ {val:.2f}"); has_faturas = True
+    if not has_faturas: print("Nenhuma fatura encontrada.")

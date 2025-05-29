@@ -1,6 +1,7 @@
 # C:\Confia\confia_app\main_app_frame.py
 import customtkinter as ctk
 import tkinter
+from tkinter import font as tkFont # <<< ADICIONAR ESTE IMPORT
 from tkinter import messagebox
 from datetime import datetime, date, timedelta
 import db_manager 
@@ -248,10 +249,13 @@ class MainAppFrame(ctk.CTkFrame):
         self.controller = controller
         self.configure(fg_color="transparent")
         
-        print("DEBUG_MainAppFrame: __init__ - INÍCIO")
-        self.dialog_add_edit_credit = None; self.dialog_add_edit_debit = None
-        self.dialog_add_edit_card = None; self.dialog_upsert_invoice = None 
-        self.selected_card_id = None; self.last_selected_card_row_frame = None 
+        self.dialog_add_edit_credit = None 
+        self.dialog_add_edit_debit = None
+        self.dialog_add_edit_card = None 
+        self.dialog_upsert_invoice = None 
+
+        self.selected_card_id = None 
+        self.last_selected_card_row_frame = None 
         
         self.card_row_default_fg_color = ("gray92", "gray20") 
         self.card_row_selected_fg_color = ("#3B8ED0", "#1F6AA5") 
@@ -263,31 +267,144 @@ class MainAppFrame(ctk.CTkFrame):
         self.current_invoice_year = date.today().year 
         self.selected_invoice_details = None 
         self.last_selected_invoice_cell_frame = None 
-        self.invoice_cell_selected_border_color = self.card_row_selected_fg_color # Azul para borda de destaque
+        self.invoice_cell_selected_border_color = self.card_row_selected_fg_color
+        self.invoice_cell_default_border_color = ("gray75", "gray28")
+        self.canvas_chart1 = None; self.canvas_chart2 = None; self.canvas_chart3 = None; self.canvas_chart4 = None
+        
+        # --- ADICIONAR/GARANTIR ESTAS LINHAS ---
+        self.invoice_cell_default_fg_color = ("#FFFFFF", "#333333") # Cor padrão para células de fatura
+        self.invoice_cell_selected_border_color = self.card_row_selected_fg_color # Usa a mesma cor de destaque azul para borda
         self.invoice_cell_default_border_color = ("gray75", "gray28") # Cor de borda sutil para células não selecionadas
-        # CORREÇÃO DO AttributeError:
-        self.invoice_cell_default_fg_color = ("#FFFFFF", "#333333") # Cor de fundo padrão para células de fatura
+        # --- FIM DA ADIÇÃO/GARANTIA ---
+
+        # Atributos para os canvases dos gráficos do Matplotlib
+        self.canvas_chart1 = None 
+        self.canvas_chart2 = None
+        self.canvas_chart3 = None
+        self.canvas_chart4 = None
 
         self._setup_menu()
         self._create_tabs() 
-        print("DEBUG_MainAppFrame: __init__ - FIM")
+        print("DEBUG_MainAppFrame: __init__ COMPLETO.")
 
     def _setup_menu(self):
-        # ... (Seu código _setup_menu como estava) ...
-        menubar = tkinter.Menu(self.controller); menu_sistema = tkinter.Menu(menubar, tearoff=0)
-        menu_sistema.add_command(label="Criar Novo Usuário", command=self._criar_novo_usuario)
-        menu_sistema.add_command(label="Alterar Senha", command=self._alterar_senha)
-        menu_sistema.add_command(label="Gerenciar Categorias", command=lambda: self.controller.show_frame("CategoryManagementFrame"))
-        menu_sistema.add_separator(); menu_sistema.add_command(label="Sair", command=self.controller._on_app_closing)
-        menubar.add_cascade(label="Sistema", menu=menu_sistema)
+        menubar = tkinter.Menu(self.controller)
+        
+        # --- DEFINIÇÃO DA FONTE DO MENU ---
+        # Use uma família de fonte comum e um tamanho um pouco maior.
+        # O tamanho padrão dos widgets CTk é geralmente 13 ou 14.
+        # O menu do Tkinter é menor, então 11 ou 12 pode ser um bom aumento.
+        menu_font = tkFont.Font(family="Segoe UI", size=11) # Experimente size=11 ou 12
+
+        # Menu "Sistema"
+        menu_sistema = tkinter.Menu(menubar, tearoff=0)
+        menu_sistema.add_command(label="Gerenciar Categorias", command=lambda: self.controller.show_frame("CategoryManagementFrame"), font=menu_font)
+        menu_sistema.add_separator()
+        menu_sistema.add_command(label="Sair", command=self.controller._on_app_closing, font=menu_font)
+        menubar.add_cascade(label="Sistema", menu=menu_sistema, font=menu_font) # Aplica ao título do menu
+
+        # Menu "Ferramentas"
         menu_ferramentas = tkinter.Menu(menubar, tearoff=0)
-        menu_ferramentas.add_command(label="Gerar Dados de Teste", command=self._gerar_dados_teste)
-        menu_ferramentas.add_command(label="Apagar Dados de Teste", command=self._apagar_dados_teste)
-        menubar.add_cascade(label="Ferramentas", menu=menu_ferramentas)
+        menu_ferramentas.add_command(label="Gerar Dados de Teste", command=self._on_generate_test_data_click, font=menu_font)
+        menu_ferramentas.add_command(label="Apagar Dados de Teste", command=self._on_delete_test_data_click, font=menu_font)
+        menubar.add_cascade(label="Ferramentas", menu=menu_ferramentas, font=menu_font) # Aplica ao título do menu
+        
+        # Menu "Ajuda"
         menu_ajuda = tkinter.Menu(menubar, tearoff=0)
-        menu_ajuda.add_command(label="Sobre Confia", command=self._sobre_confia)
-        menubar.add_cascade(label="Ajuda", menu=menu_ajuda)
+        menu_ajuda.add_command(label="Sobre Confia", command=self._sobre_confia, font=menu_font)
+        menubar.add_cascade(label="Ajuda", menu=menu_ajuda, font=menu_font) # Aplica ao título do menu
+        
         self.controller.config(menu=menubar)
+
+    # ... (Mantenha _create_tabs, _on_tab_change, e toda a configuração das abas 
+    #      (Dashboard, Créditos, Débitos, Cartões) como estavam na última versão funcional) ...
+    # ... (O código completo para essas seções está no Passo 86) ...
+
+    # --- NOVOS MÉTODOS PARA OS COMANDOS DO MENU FERRAMENTAS ---
+
+    def _refresh_all_views(self):
+        """Método auxiliar para atualizar os dados em todas as abas visíveis."""
+        print("Atualizando todas as visualizações de dados...")
+        # Atualiza a aba de créditos, se existir
+        if hasattr(self, '_load_initial_credits_data'):
+            self._load_initial_credits_data()
+        
+        # Atualiza a aba de débitos, se existir
+        if hasattr(self, '_load_initial_debits_data'):
+            self._load_initial_debits_data()
+            
+        # Atualiza a aba de cartões, se existir
+        if hasattr(self, '_load_and_display_cards'):
+            self._load_and_display_cards()
+            # Garante que o painel de faturas seja escondido se nenhum cartão estiver selecionado
+            if self.selected_card_id is None and hasattr(self, 'invoice_details_block_frame') and self.invoice_details_block_frame.winfo_ismapped():
+                 self.invoice_details_block_frame.grid_remove()
+                 self._reset_invoice_selection_and_buttons()
+        
+        # Atualiza a aba do dashboard, se existir
+        if hasattr(self, '_update_all_dashboard_charts'):
+            self._update_all_dashboard_charts()
+        
+        print("Atualização das visualizações concluída.")
+
+    def _on_generate_test_data_click(self):
+        """
+        Lida com o clique em 'Gerar Dados de Teste'. Apaga os dados antigos e gera novos.
+        """
+        # Pergunta ao usuário se ele tem certeza, avisando que os dados atuais serão apagados.
+        confirm = messagebox.askyesno(
+            "Gerar Dados de Teste",
+            "Isso irá apagar TODAS as transações, cartões e faturas existentes antes de gerar novos dados de teste.\n\nAs suas categorias NÃO serão afetadas.\n\nDeseja continuar?",
+            icon='warning',
+            parent=self.controller
+        )
+        
+        if confirm:
+            print("Confirmado. Apagando dados transacionais antigos...")
+            # Primeiro, apaga os dados antigos
+            db_manager.delete_all_transactional_data()
+            
+            print("Gerando novos dados de teste...")
+            # Em seguida, gera os novos dados de teste
+            db_manager.generate_test_data()
+            
+            messagebox.showinfo("Sucesso", "Novos dados de teste foram gerados com sucesso!", parent=self.controller)
+            
+            # Por fim, atualiza todas as telas para refletir os novos dados
+            self._refresh_all_views()
+
+    def _on_delete_test_data_click(self):
+        """
+        Lida com o clique em 'Apagar Dados de Teste'.
+        """
+        # Pergunta ao usuário se ele tem certeza da exclusão.
+        confirm = messagebox.askyesno(
+            "Apagar Dados de Teste",
+            "Tem certeza que deseja apagar TODAS as transações (créditos e débitos), TODOS os cartões e TODAS as faturas de cartão?\n\nEsta ação não pode ser desfeita.\n\nAs suas categorias NÃO serão afetadas.",
+            icon='warning',
+            parent=self.controller
+        )
+
+        if confirm:
+            print("Confirmado. Apagando todos os dados transacionais...")
+            # Apaga todos os dados transacionais
+            db_manager.delete_all_transactional_data()
+            
+            messagebox.showinfo("Sucesso", "Todos os dados de transações, cartões e faturas foram apagados.", parent=self.controller)
+            
+            # Atualiza todas as telas para refletir que os dados foram removidos
+            self._refresh_all_views()
+
+    # --- REMOVER OS MÉTODOS PLACEHOLDER ANTIGOS ---
+    # def _gerar_dados_teste(self): print("MainAppFrame: Ação 'Gerar Dados de Teste'")
+    # def _apagar_dados_teste(self): print("MainAppFrame: Ação 'Apagar Dados de Teste'")
+    # Substituímos os dois acima pelos novos métodos _on_generate_test_data_click e _on_delete_test_data_click
+
+    # ... (RESTANTE DA SUA CLASSE MAINAPPFRAME E O BLOCO if __name__ == '__main__' COMO ESTAVAM) ...
+    def _sobre_confia(self): # Mantém este e os outros que não foram substituídos
+        from customtkinter import CTkMessagebox 
+        CTkMessagebox(master=self.controller, title="Sobre Confia", 
+                      message="Confia - Seu App de Controle Financeiro Pessoal\nVersão 0.1.0\nDesenvolvido com Python e CustomTkinter")
 
     def _create_tabs(self):
         print("DEBUG_TABS: _create_tabs - INÍCIO")

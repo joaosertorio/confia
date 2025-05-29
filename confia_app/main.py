@@ -10,33 +10,32 @@ from main_app_frame import MainAppFrame
 from category_management_frame import CategoryManagementFrame # Mantenha esta e outras importações de frame
 
 class App(ctk.CTk): 
+    # ... (__init__ como estava) ...
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         print("DEBUG_APP: App __init__ - INÍCIO")
-
         self.title("Confia") 
-        self.geometry("450x600") # Tamanho inicial para login
+        self.geometry("450x600") 
         ctk.set_appearance_mode("light") 
-
         container = ctk.CTkFrame(self, fg_color="transparent")
         container.pack(side="top", fill="both", expand=True)
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
-
         self.frames = {} 
-
         print("DEBUG_APP: App.__init__ - Criando frames...")
-        # Cria todos os frames principais e armazena
+        # As classes dos frames DEVEM ser importadas no topo do main.py
+        from login_frame import LoginFrame
+        from main_app_frame import MainAppFrame
+        from category_management_frame import CategoryManagementFrame
+
         for F in (LoginFrame, MainAppFrame, CategoryManagementFrame): 
             page_name = F.__name__
             print(f"DEBUG_APP: App.__init__ - Criando frame: {page_name}")
             frame = F(parent=container, controller=self) 
             self.frames[page_name] = frame
-            frame.grid(row=0, column=0, sticky="nsew") # Coloca no grid, mas só um será visível
-
+            frame.grid(row=0, column=0, sticky="nsew")
         print("DEBUG_APP: App.__init__ - Mostrando LoginFrame...")
-        self.show_frame("LoginFrame") # MOSTRA O LOGIN FRAME INICIALMENTE
-        
+        self.show_frame("LoginFrame") 
         self.protocol("WM_DELETE_WINDOW", self._on_app_closing)
         print("DEBUG_APP: App __init__ - FIM")
 
@@ -47,14 +46,15 @@ class App(ctk.CTk):
             frame.tkraise() 
             print(f"DEBUG_APP: show_frame - Frame '{page_name}' elevado.")
 
-            # Ajusta título e geometria conforme o frame
             if page_name == "MainAppFrame":
                 self.title("Confia - Principal")
-                self.geometry("1200x800") # Tamanho para o app principal
-                # O menu é configurado pelo MainAppFrame quando ele é mostrado ou criado
+                self.geometry("1200x800")
+                # --- ADIÇÃO/GARANTIA AQUI ---
+                # Garante que o menu do MainAppFrame seja configurado/reaplicado
                 if hasattr(frame, '_setup_menu') and callable(frame._setup_menu):
-                     print(f"DEBUG_APP: show_frame - Configurando menu para MainAppFrame.")
-                     # frame._setup_menu() # O MainAppFrame já faz isso no seu __init__
+                    print(f"DEBUG_APP: show_frame - Reconfigurando menu para MainAppFrame.")
+                    frame._setup_menu() 
+                # --- FIM DA ADIÇÃO ---
             elif page_name == "LoginFrame":
                 self.title("Confia - Login")
                 self.geometry("450x600")
@@ -63,12 +63,11 @@ class App(ctk.CTk):
             elif page_name == "CategoryManagementFrame":
                 self.title("Confia - Gerenciar Categorias")
                 self.geometry("700x550") 
-                # Assume que o menu principal deve permanecer
+                # Garante que o menu principal esteja lá (MainAppFrame o configura)
                 main_app_fr = self.frames.get("MainAppFrame")
                 if main_app_fr and hasattr(main_app_fr, '_setup_menu'):
-                    main_app_fr._setup_menu()
+                    main_app_fr._setup_menu() # Reconfigura o menu do MainAppFrame
             
-            # Chama on_show_frame se existir (para carregar dados na aba, etc.)
             if hasattr(frame, 'on_show_frame') and callable(frame.on_show_frame):
                 print(f"DEBUG_APP: show_frame - Chamando on_show_frame para {page_name}.")
                 frame.on_show_frame()
@@ -79,6 +78,7 @@ class App(ctk.CTk):
         print("Fechando a aplicação Confia...")
         self.destroy()
 
+# ... (função main() e if __name__ == "__main__" como estavam) ...
 def main():
     print("DEBUG_MAIN: Função main() - INÍCIO")
     db_manager.initialize_database()
