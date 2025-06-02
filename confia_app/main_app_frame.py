@@ -391,59 +391,47 @@ class MainAppFrame(ctk.CTkFrame):
         self.chart_frame_4 = ctk.CTkFrame(charts_container_frame, fg_color=("gray90", "gray25")); self.chart_frame_4.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
         print("DEBUG_DASH: _setup_dashboard_tab - Estrutura criada.")
 
-    def _update_all_dashboard_charts(self, segmented_button_value=None): # Nome do argumento ajustado
+    def _update_all_dashboard_charts(self, segmented_button_value=None):
         print("DEBUG_DASH: _update_all_dashboard_charts - INÍCIO")
         # ... (lógica para pegar start_date_filter e year_for_cards como estava) ...
-        # Garante que os widgets de filtro do dashboard existam antes de usá-los
         if not (hasattr(self, 'dashboard_month_var') and 
                 hasattr(self, 'dashboard_year_entry') and 
                 hasattr(self, 'dashboard_card_year_var')):
-            print("DEBUG_DASH: Widgets do dashboard ainda não totalmente inicializados. Saindo de _update_all_dashboard_charts.")
-            if hasattr(self, 'tab_dashboard'):
-                for widget in self.tab_dashboard.winfo_children(): widget.destroy() 
-                ctk.CTkLabel(self.tab_dashboard, text="Inicializando Dashboard...", font=ctk.CTkFont(size=18)).pack(expand=True)
-            return
-
-        selected_month_name = self.dashboard_month_var.get()
-        year_str = self.dashboard_year_entry.get()
+            print("DEBUG_DASH: Widgets do dashboard ainda não totalmente inicializados."); return
+        selected_month_name = self.dashboard_month_var.get(); year_str = self.dashboard_year_entry.get()
         try:
             year = int(year_str)
-            if not hasattr(self, 'month_names'): 
-                 self.month_names = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+            if not hasattr(self, 'month_names'): self.month_names = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
             month_num = self.month_names.index(selected_month_name) + 1
             _, last_day = calendar.monthrange(year, month_num) 
-            start_date_filter = f"{year}-{month_num:02d}-01"
-            end_date_filter = f"{year}-{month_num:02d}-{last_day:02d}"
+            start_date_filter = f"{year}-{month_num:02d}-01"; end_date_filter = f"{year}-{month_num:02d}-{last_day:02d}"
         except (ValueError, IndexError, AttributeError) as e:
-            print(f"Erro ao processar filtro Mês/Ano: {e}")
             messagebox.showerror("Erro de Filtro", f"Mês ou Ano inválido no filtro principal: {e}", parent=self.controller); return
-
         year_for_cards_str = self.dashboard_card_year_var.get() 
         try: year_for_cards = int(year_for_cards_str)
         except ValueError: messagebox.showerror("Erro de Ano", "Ano inválido para cartões.", parent=self.controller); return
 
         print(f"DEBUG_DASH: Atualizando dashboard: Período Principal [{start_date_filter}-{end_date_filter}], Ano Cartões [{year_for_cards}]")
         
-        # Limpa os frames dos gráficos antes de redesenhar
         for chart_frame_attr in ["chart_frame_1", "chart_frame_2", "chart_frame_3", "chart_frame_4"]:
             if hasattr(self, chart_frame_attr):
                 frame = getattr(self, chart_frame_attr)
                 for widget in frame.winfo_children(): widget.destroy()
         
-        # Gráfico 1: Pizza Despesas por Categoria
         expenses_data = db_manager.get_total_spending_by_category(start_date_filter, end_date_filter)
-        if hasattr(self, 'chart_frame_1'): # Frame principal do Gráfico 1
-            self._create_or_update_pie_chart_expenses(expenses_data, self.chart_frame_1) # Passa o frame correto
+        if hasattr(self, 'chart_frame_1'): 
+            self._create_or_update_pie_chart_expenses(expenses_data, self.chart_frame_1) 
         
-        # --- Gráfico 2: Barras Entradas x Saídas ---
         income_expense_data = db_manager.get_total_income_vs_expenses(start_date_filter, end_date_filter)
-        if hasattr(self, 'chart_frame_2'): # Frame para o gráfico de barras
+        if hasattr(self, 'chart_frame_2'): 
             self._create_or_update_bar_chart_income_expense(income_expense_data, self.chart_frame_2)
-        # --- FIM DA CHAMADA PARA GRÁFICO 2 ---
+        
+        # --- Gráfico 3: Linhas Cartões Individuais ---
+        if hasattr(self, 'chart_frame_3'): 
+            self._create_or_update_line_chart_card_evolution(self.chart_frame_3, year_for_cards)
+        # --- FIM DA CHAMADA PARA GRÁFICO 3 ---
         
         # Placeholders para outros gráficos
-        if hasattr(self, 'chart_frame_3'):
-            ctk.CTkLabel(self.chart_frame_3, text=f"Linhas Cartões Individuais\nAno: {year_for_cards}\n(A ser implementado)", wraplength=200).pack(padx=10, pady=10, expand=True, fill="both")
         if hasattr(self, 'chart_frame_4'):
             ctk.CTkLabel(self.chart_frame_4, text=f"Linha Consolidada Cartões\nAno: {year_for_cards}\n(A ser implementado)", wraplength=200).pack(padx=10, pady=10, expand=True, fill="both")
         
@@ -578,6 +566,106 @@ class MainAppFrame(ctk.CTkFrame):
             print(f"DEBUG_DASH_CHART2: Erro crítico ao criar/desenhar gráfico de barras: {e}")
             import traceback; traceback.print_exc() 
             ctk.CTkLabel(parent_frame, text=f"Erro ao gerar gráfico de barras:\n{str(e)[:100]}").pack(padx=10,pady=10)
+            
+    def _create_or_update_line_chart_card_evolution(self, parent_frame, year: int):
+        """
+        Cria ou atualiza o gráfico de linhas da evolução mensal de gastos para cada cartão.
+        parent_frame: CTkFrame onde o gráfico será embutido.
+        year: O ano para o qual as faturas serão exibidas.
+        """
+        print(f"DEBUG_DASH_CHART3: Criando/atualizando gráfico de linhas de cartões para o ano {year}.")
+        
+        if hasattr(self, 'canvas_chart3') and self.canvas_chart3:
+            self.canvas_chart3.get_tk_widget().destroy()
+            self.canvas_chart3 = None
+        for widget in parent_frame.winfo_children():
+            widget.destroy()
+
+        all_cards = db_manager.get_all_cards() # Lista de dicts: [{'id':X, 'nome':'Y', 'cor':'#HEX', ...}]
+
+        if not all_cards:
+            ctk.CTkLabel(parent_frame, text=f"Nenhum cartão cadastrado para exibir evolução em {year}.").pack(padx=10, pady=10, expand=True, fill="both")
+            return
+
+        # Prepara dados para o gráfico
+        # meses_nomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+        # Usaremos números de 1 a 12 para o eixo X para facilitar a plotagem, e depois formatamos os ticks.
+        meses_numeros = range(1, 13) 
+
+        current_theme_mode = ctk.get_appearance_mode()
+        if current_theme_mode == "Dark":
+            safe_fig_bg_color = "#2B2B2B"; safe_text_color = "#DCE4EE"; grid_color = "#4A4D50"
+        else: 
+            safe_fig_bg_color = "#EBEBEB"; safe_text_color = "#1F1F1F"; grid_color = "#DCDCDC"
+        
+        try:
+            fig = Figure(figsize=(5, 4), dpi=90, facecolor=safe_fig_bg_color)
+            ax = fig.add_subplot(111)
+            ax.set_facecolor(safe_fig_bg_color)
+
+            has_data_to_plot = False
+            for card_info in all_cards:
+                card_id = card_info['id']
+                card_name = card_info['nome']
+                card_color = card_info.get('cor', '#808080') # Cor padrão se não definida
+                if not (card_color and card_color.startswith("#") and len(card_color) == 7):
+                    card_color = "#808080" # Fallback para cor inválida
+
+                faturas_dict = db_manager.get_faturas(card_id, year) # {1: valor, 2: valor, ...}
+                
+                # Garante que temos uma lista de 12 valores, mesmo para meses sem fatura (valor 0.0)
+                valores_mensais = [faturas_dict.get(m, 0.0) for m in meses_numeros]
+
+                if any(v > 0 for v in valores_mensais): # Plota apenas se houver algum gasto no ano
+                    ax.plot(meses_numeros, valores_mensais, marker='o', linestyle='-', linewidth=2, label=card_name, color=card_color, markersize=5)
+                    has_data_to_plot = True
+
+            if not has_data_to_plot:
+                ctk.CTkLabel(parent_frame, text=f"Sem dados de fatura para os cartões em {year}.").pack(padx=10, pady=10, expand=True, fill="both")
+                return
+
+            ax.set_ylabel('Valor da Fatura (R$)', color=safe_text_color, fontsize=10)
+            ax.set_xlabel('Mês', color=safe_text_color, fontsize=10)
+            # ax.set_title(f'Evolução Mensal por Cartão - {year}', color=safe_text_color, fontsize=12, pad=15) # Título opcional
+
+            # Configura eixo X para mostrar nomes dos meses
+            meses_nomes_abreviados = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+            ax.set_xticks(meses_numeros) # Define os ticks para cada número de mês
+            ax.set_xticklabels(meses_nomes_abreviados, rotation=45, ha="right", fontsize=8) # Define os labels dos ticks
+
+            # Estilo dos eixos
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color(safe_text_color)
+            ax.spines['bottom'].set_color(safe_text_color)
+            ax.tick_params(axis='x', colors=safe_text_color)
+            ax.tick_params(axis='y', colors=safe_text_color, labelsize=9)
+            
+            ax.yaxis.grid(True, linestyle=':', linewidth=0.6, color=grid_color, alpha=0.7)
+            ax.set_axisbelow(True) 
+            ax.set_ylim(bottom=0) # Garante que o eixo Y comece em 0
+
+            # Legenda para os cartões
+            if len(all_cards) > 0: # Adiciona legenda apenas se houver cartões
+                legend = ax.legend(title="Cartões", fontsize=8, title_fontsize=9, labelcolor=safe_text_color, 
+                                   facecolor=safe_fig_bg_color, edgecolor=safe_fig_bg_color, frameon=True)
+                if legend:
+                    legend.get_title().set_color(safe_text_color)
+                    legend.get_frame().set_alpha(None) # Tenta tornar o fundo da legenda totalmente opaco
+                    legend.get_frame().set_facecolor(safe_fig_bg_color)
+
+
+            fig.tight_layout(pad=0.8)
+
+            self.canvas_chart3 = FigureCanvasTkAgg(fig, master=parent_frame)
+            self.canvas_chart3.draw()
+            canvas_widget = self.canvas_chart3.get_tk_widget()
+            canvas_widget.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True, padx=5, pady=5)
+            print(f"DEBUG_DASH_CHART3: Gráfico de linhas de evolução de cartões criado/atualizado.")
+        except Exception as e:
+            print(f"DEBUG_DASH_CHART3: Erro crítico ao criar/desenhar gráfico de linhas de cartões: {e}")
+            import traceback; traceback.print_exc() 
+            ctk.CTkLabel(parent_frame, text=f"Erro ao gerar gráfico de evolução de cartões:\n{str(e)[:100]}").pack(padx=10,pady=10)           
 
     def _create_custom_pie_legend(self, data, legend_parent_frame): # Como no Passo 90
         # ... (Cole aqui o código completo do _create_custom_pie_legend do Passo 90) ...
