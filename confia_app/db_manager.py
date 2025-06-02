@@ -3,6 +3,7 @@ import sqlite3
 import os      
 from datetime import date, timedelta, datetime # Adicionado datetime completo
 import random # Novo import
+import calendar # Necessário para calendar.monthrange
 
 DATABASE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'database')
 DATABASE_NAME = 'confia.db'
@@ -500,84 +501,103 @@ def delete_all_transactional_data():
             conn.close()
 
 def generate_test_data():
-    """
-    Gera um conjunto de dados de teste: cartões, faturas, créditos e débitos.
-    É recomendável chamar delete_all_transactional_data() antes para evitar duplicatas
-    ou conflitos se esta função for chamada múltiplas vezes.
-    """
     print("Iniciando geração de dados de teste...")
     
     # --- 1. Adicionar Cartões de Teste ---
-    cards_to_add = [
-        {"nome": "Cartão Principal Azul", "bandeira": "Visa", "cor": "#3B8ED0", "limite": 5000, "dia_fechamento": 20, "dia_vencimento": 28},
-        {"nome": "Cartão Viagem Verde", "bandeira": "Mastercard", "cor": "#2ECC71", "limite": 10000, "dia_fechamento": 15, "dia_vencimento": 25}
+    cards_data = [
+        {"nome": "Visa Principal", "bandeira": "Visa", "cor": "#3B8ED0", "limite": 5000, "dia_fechamento": 20, "dia_vencimento": 28, "banco":"Banco Alfa"},
+        {"nome": "Master Viagem", "bandeira": "Mastercard", "cor": "#2ECC71", "limite": 10000, "dia_fechamento": 15, "dia_vencimento": 25, "banco":"Banco Beta"}
     ]
     card_ids = []
-    for card_data in cards_to_add:
-        # Adiciona banco como None, pois removemos do formulário principal
-        card_id = add_card(card_data["nome"], card_data["bandeira"], card_data["cor"], 
-                           card_data["limite"], card_data["dia_fechamento"], card_data["dia_vencimento"], banco=None)
+    for c_data in cards_data: # Renomeado para c_data para não conflitar com c de categoria
+        card_id = add_card(nome=c_data["nome"], bandeira=c_data["bandeira"], cor=c_data["cor"], 
+                           limite=c_data["limite"], dia_fechamento=c_data["dia_fechamento"], 
+                           dia_vencimento=c_data["dia_vencimento"], banco=c_data["banco"])
         if card_id:
             card_ids.append(card_id)
-    
-    if not card_ids:
-        print("Não foi possível adicionar cartões de teste. Geração de dados de teste interrompida para faturas.")
-        # Ainda tenta gerar transações gerais
     
     # --- 2. Gerar Faturas para os Cartões de Teste ---
     today = date.today()
     current_year = today.year
     previous_year = current_year - 1
     
-    for card_id in card_ids:
+    for c_id in card_ids:
+        if c_id is None: continue
         # Faturas para o ano anterior completo
         for month in range(1, 13):
             valor = round(random.uniform(50.0, 800.0), 2)
-            upsert_fatura(card_id, previous_year, month, valor)
+            upsert_fatura(c_id, previous_year, month, valor)
         
-        # Faturas para o ano atual, até o mês anterior ao atual
-        # (ou até o mês atual se preferir simular uma fatura já fechada)
-        for month in range(1, today.month + 1): # Inclui o mês atual
+        # Faturas para o ano atual, até o mês ATUAL inclusive
+        for month in range(1, today.month + 1): 
             valor = round(random.uniform(70.0, 900.0), 2)
-            upsert_fatura(card_id, current_year, month, valor)
+            upsert_fatura(c_id, current_year, month, valor)
     print(f"{len(card_ids) * (12 + today.month)} faturas de teste geradas (aprox).")
 
-    # --- 3. Gerar Transações de Crédito ---
-    credit_categories = get_categories_by_type('Crédito')
-    if not credit_categories:
-        print("Nenhuma categoria de crédito encontrada. Pulando geração de créditos de teste.")
-    else:
-        num_credits_to_add = min(len(credit_categories), 3) # Pelo menos 3 ou o total de categorias de crédito
-        selected_credit_categories = random.sample(credit_categories, num_credits_to_add)
-        
-        for i in range(num_credits_to_add): # Garante pelo menos uma transação por categoria selecionada
-            cat_id = selected_credit_categories[i][0] # ID da categoria
-            desc = f"Renda de Teste {i+1} ({selected_credit_categories[i][1]})"
+    # --- 3. Gerar Transações de Crédito e Débito (ALGUMAS NO MÊS ATUAL) ---
+    cred_cats = get_categories_by_type('Crédito')
+    deb_cats = get_categories_by_type('Débito')
+    
+    num_trans_total = 0
+
+    # Créditos (garantir alguns no mês atual)
+    if cred_cats:
+        # 2 transações no mês atual
+        for i in range(min(len(cred_cats), 2)):
+            cat_id = random.choice(cred_cats)[0]
+            desc = f"Crédito Mês Atual {i+1} ({get_category_name_by_id(cat_id)})" # Helper para nome
+            val = round(random.uniform(1500.0, 4000.0), 2)
+            day_in_month = random.randint(1, min(today.day, calendar.monthrange(today.year, today.month)[1])) # Dia aleatório até hoje no mês atual
+            trans_date = today.replace(day=day_in_month).strftime("%Y-%m-%d")
+            if add_transaction(trans_date, desc, val, 'Crédito', cat_id): num_trans_total+=1
+        # Mais alguns créditos em datas variadas
+        for i in range(min(len(cred_cats), 3)): # Até mais 3
+            cat_id = random.choice(cred_cats)[0]
+            desc = f"Renda Teste Variada {i+1} ({get_category_name_by_id(cat_id)})"
             val = round(random.uniform(1000.0, 7000.0), 2)
-            # Data aleatória nos últimos 2 meses
-            day_offset = random.randint(1, 60)
+            day_offset = random.randint(1, 60) # Nos últimos 60 dias
             trans_date = (today - timedelta(days=day_offset)).strftime("%Y-%m-%d")
-            add_transaction(trans_date, desc, val, 'Crédito', cat_id)
-        print(f"{num_credits_to_add} transações de crédito de teste geradas.")
+            if add_transaction(trans_date, desc, val, 'Crédito', cat_id): num_trans_total+=1
 
-    # --- 4. Gerar Transações de Débito ---
-    debit_categories = get_categories_by_type('Débito')
-    if not debit_categories:
-        print("Nenhuma categoria de débito encontrada. Pulando geração de débitos de teste.")
-    else:
-        num_debits_to_add = min(len(debit_categories), 10) # Até 10 ou o total de categorias de débito
-        selected_debit_categories = random.sample(debit_categories, num_debits_to_add)
+    # Débitos (garantir alguns no mês atual para o gráfico de pizza)
+    if deb_cats:
+        # Pelo menos 3-5 categorias de débito diferentes no mês atual
+        num_debits_current_month = min(len(deb_cats), 5)
+        selected_debit_categories_current = random.sample(deb_cats, num_debits_current_month)
+        for cat_data in selected_debit_categories_current:
+            cat_id = cat_data[0]
+            desc = f"Gasto Mês Atual ({cat_data[1]})"
+            val = round(random.uniform(20.0, 200.0), 2)
+            day_in_month = random.randint(1, min(today.day, calendar.monthrange(today.year, today.month)[1]))
+            trans_date = today.replace(day=day_in_month).strftime("%Y-%m-%d")
+            if add_transaction(trans_date, desc, val, 'Débito', cat_id): num_trans_total+=1
 
-        for i in range(num_debits_to_add): # Garante pelo menos uma transação por categoria selecionada
-            cat_id = selected_debit_categories[i][0]
-            desc = f"Gasto de Teste {i+1} ({selected_debit_categories[i][1]})"
+        # Mais alguns débitos em datas variadas
+        for i in range(min(len(deb_cats), 10)): # Até mais 10
+            cat_id = random.choice(deb_cats)[0]
+            desc = f"Gasto Teste Variado {i+1} ({get_category_name_by_id(cat_id)})"
             val = round(random.uniform(10.0, 300.0), 2)
             day_offset = random.randint(1, 60)
             trans_date = (today - timedelta(days=day_offset)).strftime("%Y-%m-%d")
-            add_transaction(trans_date, desc, val, 'Débito', cat_id)
-        print(f"{num_debits_to_add} transações de débito de teste geradas.")
-        
+            if add_transaction(trans_date, desc, val, 'Débito', cat_id): num_trans_total+=1
+            
+    print(f"{num_trans_total} transações de crédito/débito de teste geradas.")
     print("Geração de dados de teste concluída.")
+
+# Adicione esta função auxiliar se ela não existir, ou adapte para pegar o nome da categoria
+def get_category_name_by_id(category_id: int):
+    """Busca o nome de uma categoria pelo seu ID."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT nome FROM categorias WHERE id = ?", (category_id,))
+        result = cursor.fetchone()
+        return result[0] if result else "Categoria Desconhecida"
+    except sqlite3.Error as e:
+        print(f"Erro ao buscar nome da categoria {category_id}: {e}")
+        return "Erro Categoria"
+    finally:
+        if conn: conn.close()
 
 # Bloco if __name__ == '__main__': para testes
 if __name__ == '__main__':
