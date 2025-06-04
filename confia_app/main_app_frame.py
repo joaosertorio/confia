@@ -6,12 +6,16 @@ from tkinter import font as tkFont
 from datetime import datetime, date, timedelta
 import db_manager 
 import os
-import calendar
-from datetime import datetime, date, timedelta
+import calendar # Adicionado para o filtro do dashboard
+from category_management_frame import CategoryManagementFrame 
+
+
+# Imports para Matplotlib
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt 
+import matplotlib.patheffects as path_effects
 
 # --- CLASSES DE DIÁLOGO ---
 
@@ -144,7 +148,9 @@ class AddEditDebitDialog(ctk.CTkToplevel): # Como no Passo 86
 
 class AddEditCardDialog(ctk.CTkToplevel): # Como no Passo 86
     def __init__(self, master, controller, refresh_callback, card_data=None):
-        super().__init__(master);self.controller=controller;self.refresh_callback=refresh_callback;self.editing_card_id=None
+        local_kwargs = {k: v for k, v in {} if k != 'controller'} # Simulação se kwargs viesse da chamada
+        super().__init__(master, **local_kwargs) # Passa master
+        self.controller=controller;self.refresh_callback=refresh_callback;self.editing_card_id=None
         self.card_color_map={"Azul Clássico":"#3B8ED0","Verde Esmeralda":"#2ECC71","Vermelho Rubi":"#E74C3C","Amarelo Solar":"#F1C40F","Laranja Vibrante":"#E67E22","Roxo Profundo":"#8E44AD","Cinza Grafite":"#34495E","Prata":"#BDC3C7","Turquesa":"#1ABC9C", "Preto":"#000000", "Branco":"#FFFFFF"}
         self.card_color_names=list(self.card_color_map.keys())
         self.card_flags=["Mastercard","Visa","American Express","Elo","Hipercard","Outros"]
@@ -191,7 +197,8 @@ class AddEditCardDialog(ctk.CTkToplevel): # Como no Passo 86
 
 class UpsertInvoiceDialog(ctk.CTkToplevel): # Como no Passo 68
     def __init__(self, master, controller, refresh_callback, card_id, year, month=None, current_value=0.0, edit_mode=False):
-        super().__init__(master)
+        local_kwargs = {k: v for k, v in {} if k != 'controller'}
+        super().__init__(master, **local_kwargs)
         self.controller = controller; self.refresh_callback = refresh_callback
         self.card_id_to_affect = card_id; self.year_to_affect = year
         self.month_to_affect = month; self.current_value = current_value
@@ -252,15 +259,16 @@ class UpsertInvoiceDialog(ctk.CTkToplevel): # Como no Passo 68
 
 # --- CLASSE MAINAPPFRAME ---
 class MainAppFrame(ctk.CTkFrame):
-    def __init__(self, master, controller, **kwargs): # Alterado 'parent' para 'master'
-        super().__init__(master, **kwargs)            # Passa 'master' corretamente
-        # --- FIM DA CORREÇÃO ---
-        
+    def __init__(self, master, controller, **kwargs):
+        # ... (corpo do seu __init__ ... )
+        local_kwargs = {k: v for k, v in kwargs.items() if k != 'controller'}
+        super().__init__(master, **local_kwargs)
         self.controller = controller
+        # ...
+        self.category_management_window = None # Para rastrear a janela de categorias
         self.configure(fg_color="transparent")
         
         print("DEBUG_MainAppFrame: __init__ - INÍCIO")
-        # ... (o restante do seu método __init__ como estava, com todas as inicializações de atributos) ...
         self.dialog_add_edit_credit = None 
         self.dialog_add_edit_debit = None
         self.dialog_add_edit_card = None 
@@ -296,10 +304,10 @@ class MainAppFrame(ctk.CTkFrame):
 
     def _setup_menu(self):
         menubar = tkinter.Menu(self.controller)
-        try: menu_font = tkFont.Font(family="Segoe UI", size=11)
+        try: menu_font = tkFont.Font(family="Segoe UI", size=10)
         except: menu_font = None 
         menu_sistema = tkinter.Menu(menubar, tearoff=0)
-        menu_sistema.add_command(label="Gerenciar Categorias", command=lambda: self.controller.show_frame("CategoryManagementFrame"), font=menu_font)
+        menu_sistema.add_command(label="Gerenciar Categorias", command=self._open_category_management_window, font=menu_font)
         menu_sistema.add_separator(); menu_sistema.add_command(label="Sair", command=self.controller._on_app_closing, font=menu_font)
         menubar.add_cascade(label="Sistema", menu=menu_sistema, font=menu_font)
         menu_ferramentas = tkinter.Menu(menubar, tearoff=0)
@@ -309,23 +317,44 @@ class MainAppFrame(ctk.CTkFrame):
         menu_ajuda = tkinter.Menu(menubar, tearoff=0)
         menu_ajuda.add_command(label="Sobre Confia", command=self._sobre_confia, font=menu_font)
         menubar.add_cascade(label="Ajuda", menu=menu_ajuda, font=menu_font)
-        self.controller.config(menu=menubar) # ESSENCIAL para exibir o menu
-        print("DEBUG: Menu configurado.")
+        self.controller.config(menu=menubar)
+        
+    def _open_category_management_window(self):
+        print("DEBUG_MainAppFrame: Abrindo janela de Gerenciar Categorias...")
+        
+        try:
+            from category_management_frame import CategoryManagementFrame
+        except ImportError as e:
+            messagebox.showerror("Erro de Importação", f"Não foi possível carregar CategoryManagementFrame: {e}")
+            return
+
+        if self.category_management_window is None or not self.category_management_window.winfo_exists():
+            # --- CORREÇÃO AQUI: Usar 'master_app_controller' como nome do argumento ---
+            self.category_management_window = CategoryManagementFrame(
+                master_app_controller=self.controller # Passa a instância da App
+            )
+            # --- FIM DA CORREÇÃO ---
+            self.category_management_window.focus() 
+        else:
+            self.category_management_window.focus()
 
     def _create_tabs(self):
         print("DEBUG_TABS: _create_tabs - INÍCIO")
         self.tab_view = ctk.CTkTabview(self, corner_radius=10)
         self.tab_view.pack(pady=10, padx=10, fill="both", expand=True)
-        tab_names = ["Dashboard", "Créditos", "Débitos", "Cartões", "Cálculos", "Relatórios/Insights"]
+        tab_names = ["Dashboard", "Créditos", "Débitos", "Cartões", "Relatórios/Insights"]
         tab_setup_methods = {
             "Dashboard": self._setup_dashboard_tab, "Créditos": self._setup_credits_tab,
             "Débitos": self._setup_debits_tab, "Cartões": self._setup_cards_tab,
-            "Cálculos": self._setup_calculations_tab, "Relatórios/Insights": self._setup_reports_tab }
+            "Relatórios/Insights": self._setup_reports_tab
+        }
         for name in tab_names:
             print(f"DEBUG_TABS: Adicionando e configurando aba {name}...")
             tab = self.tab_view.add(name)
             setattr(self, f"tab_{name.lower().replace('/','_').replace(' ','_')}", tab)
-            if name in tab_setup_methods: tab_setup_methods[name](tab)
+            if name in tab_setup_methods and hasattr(self, tab_setup_methods[name].__name__):
+                tab_setup_methods[name](tab)
+            else: print(f"AVISO: Método de setup para '{name}' NÃO ENCONTRADO.")
         print("DEBUG_TABS: Definindo aba inicial para 'Dashboard' com set()...")
         self.tab_view.set("Dashboard") 
         current_set_tab = self.tab_view.get()
@@ -397,295 +426,350 @@ class MainAppFrame(ctk.CTkFrame):
         if not (hasattr(self, 'dashboard_month_var') and 
                 hasattr(self, 'dashboard_year_entry') and 
                 hasattr(self, 'dashboard_card_year_var')):
-            print("DEBUG_DASH: Widgets do dashboard ainda não totalmente inicializados."); return
-        selected_month_name = self.dashboard_month_var.get(); year_str = self.dashboard_year_entry.get()
+            print("DEBUG_DASH: Widgets do dashboard ainda não totalmente inicializados. Saindo de _update_all_dashboard_charts.")
+            if hasattr(self, 'tab_dashboard'):
+                for widget in self.tab_dashboard.winfo_children(): widget.destroy() 
+                ctk.CTkLabel(self.tab_dashboard, text="Inicializando Dashboard...", font=ctk.CTkFont(size=18)).pack(expand=True)
+            return
+
+        selected_month_name = self.dashboard_month_var.get()
+        year_str = self.dashboard_year_entry.get()
         try:
             year = int(year_str)
-            if not hasattr(self, 'month_names'): self.month_names = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+            if not hasattr(self, 'month_names'): 
+                 self.month_names = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
             month_num = self.month_names.index(selected_month_name) + 1
             _, last_day = calendar.monthrange(year, month_num) 
-            start_date_filter = f"{year}-{month_num:02d}-01"; end_date_filter = f"{year}-{month_num:02d}-{last_day:02d}"
+            start_date_filter = f"{year}-{month_num:02d}-01"
+            end_date_filter = f"{year}-{month_num:02d}-{last_day:02d}"
         except (ValueError, IndexError, AttributeError) as e:
-            messagebox.showerror("Erro de Filtro", f"Mês ou Ano inválido no filtro principal: {e}", parent=self.controller); return
+            print(f"Erro ao processar filtro Mês/Ano: {e}")
+            messagebox.showerror("Erro de Filtro", f"Mês ou Ano inválido no filtro principal: {e}", parent=self.controller)
+            return
+
         year_for_cards_str = self.dashboard_card_year_var.get() 
         try: year_for_cards = int(year_for_cards_str)
         except ValueError: messagebox.showerror("Erro de Ano", "Ano inválido para cartões.", parent=self.controller); return
 
         print(f"DEBUG_DASH: Atualizando dashboard: Período Principal [{start_date_filter}-{end_date_filter}], Ano Cartões [{year_for_cards}]")
         
+        # Limpa os frames principais dos gráficos (self.chart_frame_1, etc.)
+        # A limpeza do conteúdo interno (canvas, legenda específica) é feita pelos métodos de criação de gráfico.
         for chart_frame_attr in ["chart_frame_1", "chart_frame_2", "chart_frame_3", "chart_frame_4"]:
             if hasattr(self, chart_frame_attr):
                 frame = getattr(self, chart_frame_attr)
-                for widget in frame.winfo_children(): widget.destroy()
+                # Limpa o frame antes de adicionar novo título e conteúdo do gráfico
+                for widget in frame.winfo_children(): 
+                    widget.destroy() 
         
+        # Gráfico 1: Pizza Despesas por Categoria
         expenses_data = db_manager.get_total_spending_by_category(start_date_filter, end_date_filter)
-        if hasattr(self, 'chart_frame_1'): 
-            self._create_or_update_pie_chart_expenses(expenses_data, self.chart_frame_1) 
-        
-        income_expense_data = db_manager.get_total_income_vs_expenses(start_date_filter, end_date_filter)
-        if hasattr(self, 'chart_frame_2'): 
-            self._create_or_update_bar_chart_income_expense(income_expense_data, self.chart_frame_2)
-        
-        # --- Gráfico 3: Linhas Cartões Individuais ---
-        if hasattr(self, 'chart_frame_3'): 
-            self._create_or_update_line_chart_card_evolution(self.chart_frame_3, year_for_cards)
-        # --- FIM DA CHAMADA PARA GRÁFICO 3 ---
+        # --- CORREÇÃO/VERIFICAÇÃO AQUI ---
+        # A chamada deve passar os frames corretos para a pizza e para a legenda,
+        # que são criados dentro de _setup_dashboard_tab como self.chart_frame_1_pie e self.legend_frame_1
+        # e são filhos de self.chart_frame_1 (que é o container geral do gráfico 1).
+        if hasattr(self, 'chart_frame_1'): # chart_frame_1 é o container principal do gráfico 1
+            # _create_or_update_pie_chart_expenses agora recebe o frame pai (self.chart_frame_1)
+            # e internamente cria os frames para pizza e legenda.
+            self._create_or_update_pie_chart_expenses(expenses_data, self.chart_frame_1)
+        # --- FIM DA CORREÇÃO/VERIFICAÇÃO ---
         
         # Placeholders para outros gráficos
+        if hasattr(self, 'chart_frame_2'):
+            # ... (lógica para Gráfico 2 como estava) ...
+            income_expense_data = db_manager.get_total_income_vs_expenses(start_date_filter, end_date_filter)
+            self._create_or_update_bar_chart_income_expense(income_expense_data, self.chart_frame_2)
+
+        if hasattr(self, 'chart_frame_3'):
+            # ... (lógica para Gráfico 3 como estava) ...
+            self._create_or_update_line_chart_card_evolution(self.chart_frame_3, year_for_cards)
+
         if hasattr(self, 'chart_frame_4'):
-            ctk.CTkLabel(self.chart_frame_4, text=f"Linha Consolidada Cartões\nAno: {year_for_cards}\n(A ser implementado)", wraplength=200).pack(padx=10, pady=10, expand=True, fill="both")
+            # ... (lógica para Gráfico 4 como estava) ...
+            self._create_or_update_line_chart_consolidated_cards(self.chart_frame_4, year_for_cards)
         
         print("DEBUG_DASH: Gráficos do dashboard atualizados.")
 
-    def _create_or_update_pie_chart_expenses(self, data, parent_chart_frame):
-        # Limpa o parent_chart_frame antes de desenhar
-        for widget in parent_chart_frame.winfo_children(): widget.destroy()
+    def _create_or_update_pie_chart_expenses(self, data, parent_frame):
+        print(f"DEBUG_DASH_CHART1: Pizza. Dados: {len(data) if data else 'Sem dados'}")
+        
+        # Limpa o frame e o canvas
         if hasattr(self, 'canvas_chart1') and self.canvas_chart1:
             self.canvas_chart1.get_tk_widget().destroy(); self.canvas_chart1 = None
+        for widget in parent_frame.winfo_children(): widget.destroy()
 
-        # Título DENTRO do parent_chart_frame
-        ctk.CTkLabel(parent_chart_frame, text="Despesas por Categoria", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(0,5), padx=10, anchor="n")
+        # Título
+        ctk.CTkLabel(parent_frame, text="Despesas por Categoria", 
+                     font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(5,10), padx=10, anchor="n")
 
         # Container para pizza e legenda
-        chart_content_area = ctk.CTkFrame(parent_chart_frame, fg_color="transparent")
+        chart_content_area = ctk.CTkFrame(parent_frame, fg_color="transparent")
         chart_content_area.pack(fill="both", expand=True, padx=0, pady=0)
-        chart_content_area.grid_columnconfigure(0, weight=3); chart_content_area.grid_columnconfigure(1, weight=2) # Ajuste de peso
+        chart_content_area.grid_columnconfigure(0, weight=3); 
+        chart_content_area.grid_columnconfigure(1, weight=2); 
         chart_content_area.grid_rowconfigure(0, weight=1)
 
         pie_canvas_frame = ctk.CTkFrame(chart_content_area, fg_color="transparent")
         pie_canvas_frame.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
+
         legend_scroll_frame = ctk.CTkScrollableFrame(chart_content_area, label_text="", fg_color="transparent", corner_radius=0)
         legend_scroll_frame.grid(row=0, column=1, padx=(5,0), pady=0, sticky="nsew")
 
         if not data:
-            ctk.CTkLabel(pie_canvas_frame, text="Sem despesas no período.").pack(padx=10, pady=10, expand=True); return
-
-        labels = [i[0] for i in data]; hex_colors=[i[1] if (i[1] and i[1].startswith("#") and len(i[1])==7) else "#808080" for i in data]; sizes=[i[2] for i in data]
-        mode=ctk.get_appearance_mode(); 
-        if mode == "Dark": safe_fig_bg_color = "#2B2B2B"; safe_text_color = "#DCE4EE"   
-        else: safe_fig_bg_color = "#EBEBEB"; safe_text_color = "#1F1F1F"   
-        pie_edge_color = safe_fig_bg_color
-        def autopct_format(values):
-            def func(pct): return f'{pct:.1f}%' if sum(values) > 0 else ''
-            return func
-        try:
-            fig=Figure(figsize=(3,3),dpi=80,facecolor=safe_fig_bg_color); ax=fig.add_subplot(111); ax.set_facecolor(safe_fig_bg_color) # figsize menor
-            valid_colors=[]; 
-            for hc in hex_colors:
-                try:mcolors.to_rgba(hc);valid_colors.append(hc[:7])
-                except ValueError:valid_colors.append("#808080")
-            if not valid_colors and sizes:valid_colors=None
-            if not sizes:ctk.CTkLabel(pie_canvas_frame,text="Sem dados.").pack(expand=True);return
-            wedges,_,autotexts_list=ax.pie(sizes,colors=valid_colors,autopct=autopct_format(sizes),startangle=90,pctdistance=0.80,wedgeprops={'edgecolor':pie_edge_color,'linewidth':0.5})
-            for at_item in autotexts_list:at_item.set_color("white" if mode=="Dark" and sum(mcolors.to_rgb(at_item.get_wedge().get_facecolor()))<1.5 else "black");at_item.set_fontsize(9);at_item.set_fontweight('bold')
-            centre_circle = plt.Circle((0,0),0.65,fc=safe_fig_bg_color);ax.add_artist(centre_circle);ax.axis('equal')
-            fig.tight_layout(pad=0.1) 
-            self.canvas_chart1=FigureCanvasTkAgg(fig,master=pie_canvas_frame);self.canvas_chart1.draw()
-            self.canvas_chart1.get_tk_widget().pack(side="top",fill="both",expand=True,padx=0,pady=0)
-            self._create_custom_pie_legend(data, legend_scroll_frame)
-        except Exception as e:print(f"Erro ao criar gráfico: {e}");import traceback;traceback.print_exc();ctk.CTkLabel(pie_canvas_frame,text=f"Erro gráfico").pack()
-
-    def _create_or_update_bar_chart_income_expense(self, data, parent_frame):
-        """
-        Cria ou atualiza o gráfico de barras de Entradas (Créditos) vs. Saídas (Débitos).
-        data: dicionário {'total_creditos': valor, 'total_debitos': valor}
-        parent_frame: CTkFrame onde o gráfico será embutido.
-        """
-        print(f"DEBUG_DASH_CHART2: Barras Entradas/Saídas. Dados: {data}")
-        
-        # Limpa o canvas do gráfico anterior, se existir
-        if hasattr(self, 'canvas_chart2') and self.canvas_chart2:
-            self.canvas_chart2.get_tk_widget().destroy()
-            self.canvas_chart2 = None
-        # Limpa qualquer conteúdo anterior do frame
-        for widget in parent_frame.winfo_children():
-            widget.destroy()
-
-        if not data or (data.get('total_creditos', 0) == 0 and data.get('total_debitos', 0) == 0):
-            ctk.CTkLabel(parent_frame, text="Sem dados de entradas/saídas para o período.").pack(padx=10, pady=10, expand=True, fill="both")
+            ctk.CTkLabel(pie_canvas_frame, text="Sem despesas no período.").pack(padx=10, pady=10, expand=True, fill="both")
+            for widget in legend_scroll_frame.winfo_children(): widget.destroy() 
+            ctk.CTkLabel(legend_scroll_frame, text="").pack()
             return
 
-        labels = ['Créditos', 'Débitos']
-        values = [data.get('total_creditos', 0), data.get('total_debitos', 0)]
+        category_names_for_pie = [item[0] for item in data]      
+        hex_colors_from_db = [item[1] if (item[1] and item[1].startswith("#") and len(item[1]) == 7) else "#808080" for item in data]       
+        sizes = [item[2] for item in data]        
         
-        # Cores para as barras (verde para créditos, vermelho para débitos)
-        bar_colors = ['#2ECC71', '#E74C3C'] 
+        current_theme_mode = ctk.get_appearance_mode()
+        if current_theme_mode == "Dark": 
+            safe_fig_bg_color = "#2B2B2B"
+            pie_label_text_color = "white" # Cor para nomes de categoria no tema escuro
+        else: # Light
+            safe_fig_bg_color = "#EBEBEB"
+            pie_label_text_color = "black" # Cor para nomes de categoria no tema claro
+        
+        pie_edge_color = safe_fig_bg_color
+        
+        try:
+            fig = Figure(figsize=(3.3, 3.3), dpi=90, facecolor=safe_fig_bg_color) 
+            ax = fig.add_subplot(111); ax.set_facecolor(safe_fig_bg_color)
+            valid_mpl_colors = [c if mcolors.is_color_like(c) else "#808080" for c in hex_colors_from_db]
+            if not valid_mpl_colors and sizes : valid_mpl_colors = None 
+
+            if not sizes: 
+                ctk.CTkLabel(pie_canvas_frame, text="Sem dados para exibir.").pack(padx=10, pady=10, expand=True); return
+
+            # Define se os nomes das categorias serão exibidos e suas propriedades de texto
+            display_pie_labels = category_names_for_pie if len(category_names_for_pie) <= 6 else None
+            # --- CORREÇÃO FINAL: Cor do texto fixa baseada no tema ---
+            pie_textprops = {'fontsize': 8, 'color': pie_label_text_color, 'fontweight': 'normal'} if display_pie_labels else None
+            # --- FIM DA CORREÇÃO ---
+
+            # Cria o gráfico de pizza
+            wedges, texts_on_pie = ax.pie( 
+                sizes, 
+                colors=valid_mpl_colors, 
+                labels=display_pie_labels,    
+                labeldistance=1.1,          
+                autopct=None, # Sem porcentagem                   
+                startangle=90, 
+                wedgeprops={'edgecolor': pie_edge_color, 'linewidth': 0.7, 'antialiased': True},
+                textprops=pie_textprops     
+            ) 
+            
+            # REMOVIDO: Loop que alterava a cor do texto dinamicamente. A cor agora é fixa pelo 'textprops'.
+            
+            # Círculo central para criar o efeito "donut"
+            centre_circle = plt.Circle((0,0),0.60,fc=safe_fig_bg_color) 
+            ax.add_artist(centre_circle); ax.axis('equal')  
+            fig.tight_layout(pad=0.1) 
+
+            # Adiciona o gráfico ao frame Tkinter
+            self.canvas_chart1 = FigureCanvasTkAgg(fig, master=pie_canvas_frame)
+            self.canvas_chart1.draw()
+            canvas_widget = self.canvas_chart1.get_tk_widget()
+            canvas_widget.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True, padx=0, pady=0)
+            
+            # Cria a legenda customizada à direita
+            self._create_custom_pie_legend(data, legend_scroll_frame)
+
+            print(f"DEBUG_DASH_CHART1: Gráfico de pizza (com nomes e cor de fonte fixa) e legenda criados.")
+        except Exception as e:
+            print(f"DEBUG_DASH_CHART1: Erro crítico ao criar/desenhar gráfico de pizza: {e}")
+            import traceback; traceback.print_exc() 
+            ctk.CTkLabel(pie_canvas_frame, text=f"Erro gráfico:\n{str(e)[:100]}").pack(padx=10,pady=10)
+
+    def _create_custom_pie_legend(self, data, legend_parent_frame):
+        for widget in legend_parent_frame.winfo_children(): widget.destroy()
+
+        total_gastos_para_pct = sum(item[2] for item in data) 
+        if total_gastos_para_pct == 0: 
+            ctk.CTkLabel(legend_parent_frame, text="Sem gastos para detalhar.").pack(padx=5, pady=5)
+            return
+
+        legend_parent_frame.grid_columnconfigure(0, weight=0, minsize=20)  
+        legend_parent_frame.grid_columnconfigure(1, weight=3) # Mais peso para o nome da categoria         
+        legend_parent_frame.grid_columnconfigure(2, weight=1, minsize=80) 
+        legend_parent_frame.grid_columnconfigure(3, weight=1, minsize=50) 
+
+        # --- AJUSTE DE FONTE DOS CABEÇALHOS DA LEGENDA ---
+        header_font = ctk.CTkFont(family="Segoe UI", size=13, weight="bold") # Aumentado
+        legend_font = ctk.CTkFont(family="Segoe UI", size=12) # Aumentado e definido família
+        # --- FIM DO AJUSTE DE FONTE ---
+
+        # Cabeçalhos da Legenda (opcional, mas pode ser útil)
+        # ctk.CTkLabel(legend_parent_frame, text="", width=20).grid(row=0, column=0) # Espaço para cor
+        # ctk.CTkLabel(legend_parent_frame, text="Categoria", font=header_font, anchor="w").grid(row=0, column=1, sticky="w", padx=2)
+        # ctk.CTkLabel(legend_parent_frame, text="Valor", font=header_font, anchor="e").grid(row=0, column=2, sticky="e", padx=2)
+        # ctk.CTkLabel(legend_parent_frame, text="%", font=header_font, anchor="e").grid(row=0, column=3, sticky="e", padx=2)
+        # current_row = 1 # Se usar cabeçalhos, começa na linha 1
+        
+        current_row = 0 # Começa na linha 0 se não houver cabeçalhos explícitos
+
+        for nome_categoria, cor_hex, valor_gasto in data:
+            color_box = ctk.CTkFrame(legend_parent_frame, width=15, height=15, 
+                                     fg_color=cor_hex if (cor_hex and cor_hex.startswith("#")) else "#808080", 
+                                     corner_radius=3)
+            color_box.grid(row=current_row, column=0, padx=(0,5), pady=3, sticky="w")
+
+            name_label = ctk.CTkLabel(legend_parent_frame, text=nome_categoria, anchor="w", font=legend_font, wraplength=120) # Aumentar wraplength se necessário
+            name_label.grid(row=current_row, column=1, padx=0, pady=3, sticky="w")
+
+            value_label = ctk.CTkLabel(legend_parent_frame, text=f"R$ {valor_gasto:.2f}", anchor="e", font=legend_font)
+            value_label.grid(row=current_row, column=2, padx=5, pady=3, sticky="e")
+            
+            percent = (valor_gasto / total_gastos_para_pct) * 100
+            percent_label = ctk.CTkLabel(legend_parent_frame, text=f"{percent:.1f}%", anchor="e", font=legend_font)
+            percent_label.grid(row=current_row, column=3, padx=(5,0), pady=3, sticky="e")
+            
+            current_row += 1
+        
+        if current_row == 0: # (ou 1 se usar cabeçalhos)
+             ctk.CTkLabel(legend_parent_frame, text="Sem dados para legenda.").pack(padx=5, pady=5)
+
+
+    def _create_or_update_bar_chart_income_expense(self, data, parent_frame):
+        print(f"DEBUG_DASH_CHART2: Barras Entradas/Saídas/Saldo. Dados: {data}")
+        
+        if hasattr(self, 'canvas_chart2') and self.canvas_chart2:
+            self.canvas_chart2.get_tk_widget().destroy(); self.canvas_chart2 = None
+        for widget in parent_frame.winfo_children(): widget.destroy()
+
+        ctk.CTkLabel(parent_frame, text="Fluxo de Caixa do Período", 
+                     font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(5,10), padx=10, anchor="n")
+
+        chart_actual_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        chart_actual_frame.pack(fill="both", expand=True, padx=0, pady=0)
+
+        if not data or (data.get('total_creditos', 0) == 0 and data.get('total_debitos', 0) == 0):
+            ctk.CTkLabel(chart_actual_frame, text="Sem dados de entradas/saídas para o período.").pack(padx=10, pady=10, expand=True, fill="both")
+            return
+
+        total_creditos = data.get('total_creditos', 0.0)
+        total_debitos = data.get('total_debitos', 0.0)
+        saldo_atual = total_creditos - total_debitos
+
+        labels = ['Créditos', 'Débitos', 'Saldo']
+        values = [total_creditos, total_debitos, saldo_atual]
+        
+        color_creditos = '#2ECC71'; color_debitos = '#E74C3C'; color_saldo = '#3B8ED0'
+        bar_colors = [color_creditos, color_debitos, color_saldo] 
 
         current_theme_mode = ctk.get_appearance_mode()
         if current_theme_mode == "Dark":
             safe_fig_bg_color = "#2B2B2B"; safe_text_color = "#DCE4EE"; grid_color = "#4A4D50"
+            zero_line_color = "gray" # Linha do zero mais visível no tema escuro
         else: 
-            safe_fig_bg_color = "#EBEBEB"; safe_text_color = "#1F1F1F"; grid_color = "#DCDCDC" # Um cinza um pouco mais claro para grid
-
+            safe_fig_bg_color = "#EBEBEB"; safe_text_color = "#1F1F1F"; grid_color = "#DCDCDC"
+            zero_line_color = "dimgray" # Linha do zero mais visível no tema claro
+        
         try:
-            fig = Figure(figsize=(5, 4), dpi=90, facecolor=safe_fig_bg_color) # Ajuste figsize e dpi
-            ax = fig.add_subplot(111)
-            ax.set_facecolor(safe_fig_bg_color)
+            fig = Figure(figsize=(5, 3.8), dpi=90, facecolor=safe_fig_bg_color)
+            ax = fig.add_subplot(111); ax.set_facecolor(safe_fig_bg_color)
+            bars = ax.bar(labels, values, color=bar_colors, width=0.5)
 
-            bars = ax.bar(labels, values, color=bar_colors, width=0.5) # Largura das barras
-
-            # Adiciona valores no topo das barras
             for bar in bars:
                 yval = bar.get_height()
-                # Posição do texto um pouco acima da barra
-                ax.text(bar.get_x() + bar.get_width()/2.0, yval + (max(values)*0.01 if max(values) > 0 else 0.1), 
-                        f"R$ {yval:.2f}", ha='center', va='bottom', 
-                        color=safe_text_color, fontsize=10, fontweight='bold')
+                text_color_for_bar_value = safe_text_color
+                if bar.get_label() == 'Saldo' and yval < 0: text_color_for_bar_value = color_debitos 
+                ax.text(bar.get_x() + bar.get_width()/2.0, 
+                        yval + (max(abs(v) for v in values) * 0.02 if any(v != 0 for v in values) else 0.1), 
+                        f"R$ {yval:.2f}", ha='center', va='bottom' if yval >= 0 else 'top', 
+                        color=text_color_for_bar_value, fontsize=9, fontweight='bold') # Fonte um pouco menor
 
             ax.set_ylabel('Valor (R$)', color=safe_text_color, fontsize=10)
-            # Título opcional no gráfico (pode ser um CTkLabel acima)
-            # ax.set_title('Entradas vs. Saídas do Período', color=safe_text_color, fontsize=12, pad=15)
             
-            # Estilo dos eixos
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_color(safe_text_color)
-            ax.spines['bottom'].set_color(safe_text_color)
+            ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color(safe_text_color); ax.spines['bottom'].set_color(safe_text_color)
             ax.tick_params(axis='x', colors=safe_text_color, labelsize=10)
             ax.tick_params(axis='y', colors=safe_text_color, labelsize=9)
             
-            # Grade horizontal
-            ax.yaxis.grid(True, linestyle=':', linewidth=0.6, color=grid_color, alpha=0.7)
-            ax.set_axisbelow(True) 
-
-            # Remove marcações do eixo Y se os valores forem muito pequenos para evitar poluição
-            if max(values) < 1: # Se o valor máximo for menor que 1
-                ax.set_yticks([]) # Remove os ticks do eixo Y
-            else: # Garante que o eixo Y comece em 0
-                 ax.set_ylim(bottom=0)
-
+            ax.yaxis.grid(True, linestyle=':', linewidth=0.6, color=grid_color, alpha=0.7); ax.set_axisbelow(True) 
+            
+            # --- ADICIONAR LINHA DO ZERO MAIS FORTE ---
+            ax.axhline(0, color=zero_line_color, linewidth=1.2, linestyle='-') 
+            # --- FIM DA ADIÇÃO ---
+            
+            min_val = min(0, min(values) if values else 0); max_val = max(0, max(values) if values else 0)
+            padding = (max_val - min_val) * 0.1 if (max_val - min_val) > 0 else 0.1 # Evita padding zero
+            ax.set_ylim(min_val - padding if min_val <= 0 else 0, # Garante que o eixo Y comece no ou abaixo do menor valor
+                        max_val + padding if max_val >= 0 else 0.1) # Garante que o eixo Y vá até ou acima do maior valor
 
             fig.tight_layout(pad=0.5)
 
-            self.canvas_chart2 = FigureCanvasTkAgg(fig, master=parent_frame)
-            self.canvas_chart2.draw()
-            canvas_widget = self.canvas_chart2.get_tk_widget()
-            canvas_widget.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True, padx=5, pady=5)
-            print(f"DEBUG_DASH_CHART2: Gráfico de barras de entradas/saídas criado/atualizado.")
+            self.canvas_chart2 = FigureCanvasTkAgg(fig, master=chart_actual_frame); self.canvas_chart2.draw()
+            self.canvas_chart2.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True, padx=0, pady=0)
         except Exception as e:
-            print(f"DEBUG_DASH_CHART2: Erro crítico ao criar/desenhar gráfico de barras: {e}")
-            import traceback; traceback.print_exc() 
-            ctk.CTkLabel(parent_frame, text=f"Erro ao gerar gráfico de barras:\n{str(e)[:100]}").pack(padx=10,pady=10)
-            
-    def _create_or_update_line_chart_card_evolution(self, parent_frame, year: int):
-        """
-        Cria ou atualiza o gráfico de linhas da evolução mensal de gastos para cada cartão.
-        parent_frame: CTkFrame onde o gráfico será embutido.
-        year: O ano para o qual as faturas serão exibidas.
-        """
-        print(f"DEBUG_DASH_CHART3: Criando/atualizando gráfico de linhas de cartões para o ano {year}.")
-        
-        if hasattr(self, 'canvas_chart3') and self.canvas_chart3:
-            self.canvas_chart3.get_tk_widget().destroy()
-            self.canvas_chart3 = None
-        for widget in parent_frame.winfo_children():
-            widget.destroy()
+            print(f"DEBUG_DASH_CHART2: Erro: {e}"); import traceback; traceback.print_exc() 
+            ctk.CTkLabel(chart_actual_frame, text=f"Erro gráfico:\n{str(e)[:100]}").pack()
 
-        all_cards = db_manager.get_all_cards() # Lista de dicts: [{'id':X, 'nome':'Y', 'cor':'#HEX', ...}]
 
-        if not all_cards:
-            ctk.CTkLabel(parent_frame, text=f"Nenhum cartão cadastrado para exibir evolução em {year}.").pack(padx=10, pady=10, expand=True, fill="both")
-            return
-
-        # Prepara dados para o gráfico
-        # meses_nomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-        # Usaremos números de 1 a 12 para o eixo X para facilitar a plotagem, e depois formatamos os ticks.
-        meses_numeros = range(1, 13) 
-
-        current_theme_mode = ctk.get_appearance_mode()
-        if current_theme_mode == "Dark":
-            safe_fig_bg_color = "#2B2B2B"; safe_text_color = "#DCE4EE"; grid_color = "#4A4D50"
-        else: 
-            safe_fig_bg_color = "#EBEBEB"; safe_text_color = "#1F1F1F"; grid_color = "#DCDCDC"
-        
+    def _create_or_update_line_chart_card_evolution(self, parent_frame, year: int): # Como no Passo 94
+        # ... (Código completo do _create_or_update_line_chart_card_evolution como no Passo 94) ...
+        for widget in parent_frame.winfo_children(): widget.destroy()
+        if hasattr(self, 'canvas_chart3') and self.canvas_chart3: self.canvas_chart3.get_tk_widget().destroy(); self.canvas_chart3 = None
+        ctk.CTkLabel(parent_frame, text=f"Evolução Mensal por Cartão - {year}",font=ctk.CTkFont(size=16,weight="bold")).pack(pady=(5,10),padx=10,anchor="n")
+        all_cards = db_manager.get_all_cards()
+        if not all_cards: ctk.CTkLabel(parent_frame,text=f"Nenhum cartão.").pack(expand=True); return
+        chart_actual_frame=ctk.CTkFrame(parent_frame,fg_color="transparent"); chart_actual_frame.pack(fill="both",expand=True,padx=0,pady=0)
+        meses_n=range(1,13); mode=ctk.get_appearance_mode()
+        if mode=="Dark": safe_bg="#2B2B2B";safe_txt="#DCE4EE";grid_c="#4A4D50"
+        else: safe_bg="#EBEBEB";safe_txt="#1F1F1F";grid_c="#DCDCDC"
         try:
-            fig = Figure(figsize=(5, 4), dpi=90, facecolor=safe_fig_bg_color)
-            ax = fig.add_subplot(111)
-            ax.set_facecolor(safe_fig_bg_color)
-
-            has_data_to_plot = False
-            for card_info in all_cards:
-                card_id = card_info['id']
-                card_name = card_info['nome']
-                card_color = card_info.get('cor', '#808080') # Cor padrão se não definida
-                if not (card_color and card_color.startswith("#") and len(card_color) == 7):
-                    card_color = "#808080" # Fallback para cor inválida
-
-                faturas_dict = db_manager.get_faturas(card_id, year) # {1: valor, 2: valor, ...}
-                
-                # Garante que temos uma lista de 12 valores, mesmo para meses sem fatura (valor 0.0)
-                valores_mensais = [faturas_dict.get(m, 0.0) for m in meses_numeros]
-
-                if any(v > 0 for v in valores_mensais): # Plota apenas se houver algum gasto no ano
-                    ax.plot(meses_numeros, valores_mensais, marker='o', linestyle='-', linewidth=2, label=card_name, color=card_color, markersize=5)
-                    has_data_to_plot = True
-
-            if not has_data_to_plot:
-                ctk.CTkLabel(parent_frame, text=f"Sem dados de fatura para os cartões em {year}.").pack(padx=10, pady=10, expand=True, fill="both")
-                return
-
-            ax.set_ylabel('Valor da Fatura (R$)', color=safe_text_color, fontsize=10)
-            ax.set_xlabel('Mês', color=safe_text_color, fontsize=10)
-            # ax.set_title(f'Evolução Mensal por Cartão - {year}', color=safe_text_color, fontsize=12, pad=15) # Título opcional
-
-            # Configura eixo X para mostrar nomes dos meses
-            meses_nomes_abreviados = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-            ax.set_xticks(meses_numeros) # Define os ticks para cada número de mês
-            ax.set_xticklabels(meses_nomes_abreviados, rotation=45, ha="right", fontsize=8) # Define os labels dos ticks
-
-            # Estilo dos eixos
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_color(safe_text_color)
-            ax.spines['bottom'].set_color(safe_text_color)
-            ax.tick_params(axis='x', colors=safe_text_color)
-            ax.tick_params(axis='y', colors=safe_text_color, labelsize=9)
-            
-            ax.yaxis.grid(True, linestyle=':', linewidth=0.6, color=grid_color, alpha=0.7)
-            ax.set_axisbelow(True) 
-            ax.set_ylim(bottom=0) # Garante que o eixo Y comece em 0
-
-            # Legenda para os cartões
-            if len(all_cards) > 0: # Adiciona legenda apenas se houver cartões
-                legend = ax.legend(title="Cartões", fontsize=8, title_fontsize=9, labelcolor=safe_text_color, 
-                                   facecolor=safe_fig_bg_color, edgecolor=safe_fig_bg_color, frameon=True)
-                if legend:
-                    legend.get_title().set_color(safe_text_color)
-                    legend.get_frame().set_alpha(None) # Tenta tornar o fundo da legenda totalmente opaco
-                    legend.get_frame().set_facecolor(safe_fig_bg_color)
-
-
+            fig=Figure(figsize=(5,3.8),dpi=90,facecolor=safe_bg); ax=fig.add_subplot(111); ax.set_facecolor(safe_bg)
+            has_data=False
+            for card in all_cards:
+                card_id=card['id'];card_name=card['nome'];card_color=card.get('cor','#808080')
+                if not (card_color and card_color.startswith("#") and len(card_color)==7): card_color="#808080"
+                faturas=db_manager.get_faturas(card_id,year); valores=[faturas.get(m,0.0) for m in meses_n]
+                if any(v>0 for v in valores): ax.plot(meses_n,valores,marker='o',ls='-',lw=2,label=card_name,color=card_color,ms=5); has_data=True
+            if not has_data: ctk.CTkLabel(chart_actual_frame,text=f"Sem dados em {year}.").pack(expand=True); return
+            ax.set_ylabel('Valor Fatura (R$)',color=safe_txt,fontsize=10)
+            mes_labels=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+            ax.set_xticks(meses_n);ax.set_xticklabels(mes_labels,rotation=45,ha="right",fontsize=8)
+            ax.spines['top'].set_visible(False);ax.spines['right'].set_visible(False);ax.spines['left'].set_color(safe_txt);ax.spines['bottom'].set_color(safe_txt)
+            ax.tick_params(axis='x',colors=safe_txt);ax.tick_params(axis='y',colors=safe_txt,labelsize=9)
+            ax.yaxis.grid(True,ls=':',lw=0.6,color=grid_c,alpha=0.7);ax.set_axisbelow(True);ax.set_ylim(bottom=0)
+            if len(all_cards)>0 and has_data: 
+                leg=ax.legend(title="Cartões",fontsize=8,title_fontsize=9,labelcolor=safe_txt,facecolor=safe_bg,edgecolor=safe_bg,frameon=True)
+                if leg: leg.get_title().set_color(safe_txt); leg.get_frame().set_alpha(None); leg.get_frame().set_facecolor(safe_bg)
             fig.tight_layout(pad=0.8)
+            self.canvas_chart3=FigureCanvasTkAgg(fig,master=chart_actual_frame);self.canvas_chart3.draw()
+            self.canvas_chart3.get_tk_widget().pack(side="top",fill="both",expand=True,padx=0,pady=0)
+        except Exception as e: print(f"Erro Chart3: {e}");ctk.CTkLabel(chart_actual_frame,text="Erro gráfico.").pack()
 
-            self.canvas_chart3 = FigureCanvasTkAgg(fig, master=parent_frame)
-            self.canvas_chart3.draw()
-            canvas_widget = self.canvas_chart3.get_tk_widget()
-            canvas_widget.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True, padx=5, pady=5)
-            print(f"DEBUG_DASH_CHART3: Gráfico de linhas de evolução de cartões criado/atualizado.")
-        except Exception as e:
-            print(f"DEBUG_DASH_CHART3: Erro crítico ao criar/desenhar gráfico de linhas de cartões: {e}")
-            import traceback; traceback.print_exc() 
-            ctk.CTkLabel(parent_frame, text=f"Erro ao gerar gráfico de evolução de cartões:\n{str(e)[:100]}").pack(padx=10,pady=10)           
-
-    def _create_custom_pie_legend(self, data, legend_parent_frame): # Como no Passo 90
-        # ... (Cole aqui o código completo do _create_custom_pie_legend do Passo 90) ...
-        for widget in legend_parent_frame.winfo_children(): widget.destroy()
-        total_gastos = sum(item[2] for item in data); 
-        if total_gastos == 0: ctk.CTkLabel(legend_parent_frame, text="").pack(); return # Legenda vazia se não há gastos
-        legend_parent_frame.grid_columnconfigure(0, weight=0); legend_parent_frame.grid_columnconfigure(1, weight=1); legend_parent_frame.grid_columnconfigure(2, weight=0, minsize=70); legend_parent_frame.grid_columnconfigure(3, weight=0, minsize=50)
-        header_font=ctk.CTkFont(size=11,weight="bold"); legend_font=ctk.CTkFont(size=11)
-        ctk.CTkLabel(legend_parent_frame,text="Categoria",font=header_font,anchor="w").grid(row=0,column=1,sticky="w",padx=2)
-        ctk.CTkLabel(legend_parent_frame,text="Valor",font=header_font,anchor="e").grid(row=0,column=2,sticky="e",padx=2)
-        ctk.CTkLabel(legend_parent_frame,text="%",font=header_font,anchor="e").grid(row=0,column=3,sticky="e",padx=2)
-        r=1
-        for nome,cor,val in data:
-            ctk.CTkFrame(legend_parent_frame,width=12,height=12,fg_color=cor if (cor and cor.startswith("#")) else "#808080",corner_radius=3).grid(row=r,column=0,padx=(0,5),pady=2,sticky="w")
-            ctk.CTkLabel(legend_parent_frame,text=nome,anchor="w",font=legend_font,wraplength=100).grid(row=r,column=1,sticky="w",pady=1,padx=0)
-            ctk.CTkLabel(legend_parent_frame,text=f"R$ {val:.2f}",anchor="e",font=legend_font).grid(row=r,column=2,sticky="e",pady=1,padx=2)
-            pct=(val/total_gastos)*100 if total_gastos else 0
-            ctk.CTkLabel(legend_parent_frame,text=f"{pct:.1f}%",anchor="e",font=legend_font).grid(row=r,column=3,sticky="e",pady=1,padx=(5,0))
-            r+=1
-        if r==1: ctk.CTkLabel(legend_parent_frame,text="Sem dados.").pack()
+    def _create_or_update_line_chart_consolidated_cards(self, parent_frame, year: int): # Como no Passo 95
+        # ... (Código completo do _create_or_update_line_chart_consolidated_cards como no Passo 95) ...
+        for widget in parent_frame.winfo_children(): widget.destroy()
+        if hasattr(self, 'canvas_chart4') and self.canvas_chart4: self.canvas_chart4.get_tk_widget().destroy(); self.canvas_chart4 = None
+        ctk.CTkLabel(parent_frame,text=f"Gastos Consolidados Cartões - {year}",font=ctk.CTkFont(size=16,weight="bold")).pack(pady=(5,0),padx=10,anchor="n")
+        chart_actual_frame=ctk.CTkFrame(parent_frame,fg_color="transparent"); chart_actual_frame.pack(fill="both",expand=True,padx=0,pady=0)
+        totalizer_frame=ctk.CTkFrame(parent_frame,fg_color="transparent",height=40); totalizer_frame.pack(fill="x",side="bottom",pady=(5,0))
+        totalizer_frame.grid_columnconfigure(list(range(12)),weight=1)
+        faturas=db_manager.get_consolidated_faturas_for_year(year)
+        if not faturas or all(v==0.0 for v in faturas.values()): ctk.CTkLabel(chart_actual_frame,text=f"Sem dados em {year}.").pack(expand=True); return
+        meses_n=range(1,13); valores=[faturas.get(m,0.0) for m in meses_n]; mode=ctk.get_appearance_mode()
+        if mode=="Dark": safe_bg="#2B2B2B";safe_txt="#DCE4EE";grid_c="#4A4D50";line_c="#5694F8"
+        else: safe_bg="#EBEBEB";safe_txt="#1F1F1F";grid_c="#DCDCDC";line_c="#1F6AA5"
+        try:
+            fig=Figure(figsize=(5,3.3),dpi=90,facecolor=safe_bg);ax=fig.add_subplot(111);ax.set_facecolor(safe_bg)
+            ax.plot(meses_n,valores,marker='o',ls='-',lw=2.5,color=line_c,ms=6,label="Total Faturas")
+            ax.set_ylabel('Valor Total (R$)',color=safe_txt,fontsize=10)
+            mes_labels=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+            ax.set_xticks(meses_n);ax.set_xticklabels(mes_labels,rotation=45,ha="right",fontsize=8)
+            ax.spines['top'].set_visible(False);ax.spines['right'].set_visible(False);ax.spines['left'].set_color(safe_txt);ax.spines['bottom'].set_color(safe_txt)
+            ax.tick_params(axis='x',colors=safe_txt);ax.tick_params(axis='y',colors=safe_txt,labelsize=9)
+            ax.yaxis.grid(True,ls=':',lw=0.6,color=grid_c,alpha=0.7);ax.set_axisbelow(True);ax.set_ylim(bottom=0)
+            fig.tight_layout(pad=0.8)
+            self.canvas_chart4=FigureCanvasTkAgg(fig,master=chart_actual_frame);self.canvas_chart4.draw()
+            self.canvas_chart4.get_tk_widget().pack(side="top",fill="both",expand=True,padx=0,pady=0)
+            for i,m_num in enumerate(meses_n): val_mes=valores[i]; ctk.CTkLabel(totalizer_frame,text=f"R$\n{val_mes:.2f}",font=ctk.CTkFont(size=9),text_color=safe_txt).grid(row=0,column=i,padx=1,pady=1,sticky="ew")
+        except Exception as e:print(f"Erro Chart4: {e}");ctk.CTkLabel(chart_actual_frame,text="Erro gráfico.").pack()
 
     # --- MÉTODOS DAS ABAS CRÉDITOS E DÉBITOS (COMO ESTAVAM NA VERSÃO ESTÁVEL) ---
     def _setup_credits_tab(self, tab_credits):
@@ -1033,33 +1117,48 @@ class MainAppFrame(ctk.CTkFrame):
     def _create_tabs(self):
         print("DEBUG_TABS: _create_tabs - INÍCIO")
         self.tab_view = ctk.CTkTabview(self, corner_radius=10)
-        self.tab_view.pack(pady=10, padx=10, fill="both", expand=True) # pack primeiro
+        self.tab_view.pack(pady=10, padx=10, fill="both", expand=True)
 
-        tab_names_and_setup_methods = [
-            ("Dashboard", self._setup_dashboard_tab),
-            ("Créditos", self._setup_credits_tab),
-            ("Débitos", self._setup_debits_tab),
-            ("Cartões", self._setup_cards_tab),
-            ("Cálculos", self._setup_calculations_tab),
-            ("Relatórios/Insights", self._setup_reports_tab)
-        ]
+        # Lista de nomes de abas (SEM "Cálculos")
+        tab_names = ["Dashboard", "Créditos", "Débitos", "Cartões", "Relatórios/Insights"] 
+        
+        # Dicionário mapeando nome da aba para seu método de setup
+        # --- GARANTA QUE "Cálculos" FOI REMOVIDO DESTE DICIONÁRIO ---
+        tab_setup_methods = {
+            "Dashboard": self._setup_dashboard_tab, 
+            "Créditos": self._setup_credits_tab,
+            "Débitos": self._setup_debits_tab, 
+            "Cartões": self._setup_cards_tab,
+            "Relatórios/Insights": self._setup_reports_tab
+        }
+        # --- FIM DA VERIFICAÇÃO ---
 
-        for name, setup_method in tab_names_and_setup_methods:
+        for name in tab_names:
             print(f"DEBUG_TABS: Adicionando e configurando aba {name}...")
             tab = self.tab_view.add(name)
-            # Armazena a referência da aba se necessário (ex: self.tab_dashboard)
-            setattr(self, f"tab_{name.lower().replace('/','_').replace(' ','_')}", tab) 
-            if callable(setup_method):
-                setup_method(tab) # Chama o método de setup para popular a aba
+            attr_name = f"tab_{name.lower().replace('/','_').replace(' ','_')}"
+            setattr(self, attr_name, tab)
+            
+            if name in tab_setup_methods: 
+                # Verifica se o método de setup realmente existe antes de chamar
+                if hasattr(self, tab_setup_methods[name].__name__):
+                    tab_setup_methods[name](tab) 
+                else:
+                    print(f"AVISO: Método de setup para '{name}' NÃO ENCONTRADO, criando placeholder.")
+                    ctk.CTkLabel(tab, text=f"Conteúdo de {name} em desenvolvimento.").pack(expand=True)
+            # else: # Este else não é mais necessário se tab_names só tem chaves de tab_setup_methods
+            #     ctk.CTkLabel(tab, text=f"Conteúdo de {name} Aqui").pack(expand=True) # Fallback
         
         print("DEBUG_TABS: Definindo aba inicial para 'Dashboard' com set()...")
         self.tab_view.set("Dashboard") 
+        current_set_tab = self.tab_view.get()
+        print(f"DEBUG_TABS: Aba atual APÓS set() é: '{current_set_tab}'")
         
-        # Configura o comando de mudança de aba APÓS todas as abas serem criadas e a inicial definida
         self.tab_view.configure(command=self._on_tab_change)
         
-        # Força o carregamento da aba que foi definida como padrão
-        self._on_tab_change() 
+        if hasattr(self, "_on_tab_change") and callable(self._on_tab_change):
+            print(f"DEBUG_TABS: Chamando _on_tab_change() para carregar conteúdo da aba '{current_set_tab}'...")
+            self._on_tab_change() 
         print("DEBUG_TABS: _create_tabs - FIM")
 
 
@@ -1283,7 +1382,6 @@ class MainAppFrame(ctk.CTkFrame):
             else: messagebox.showerror("Erro", "Não foi possível remover a fatura.", parent=self.controller)
             
     # Placeholders para outras abas e callbacks de menu
-    def _setup_calculations_tab(self, tab): label = ctk.CTkLabel(tab, text="Conteúdo de Cálculos Aqui"); label.pack(pady=20, padx=20)
     def _setup_reports_tab(self, tab): label = ctk.CTkLabel(tab, text="Conteúdo de Relatórios/Insights Aqui"); label.pack(pady=20, padx=20)
     def _criar_novo_usuario(self): print("MainAppFrame: Ação 'Criar Novo Usuário'")
     def _alterar_senha(self): print("MainAppFrame: Ação 'Alterar Senha'")
@@ -1295,7 +1393,7 @@ class MainAppFrame(ctk.CTkFrame):
                       message="Confia - Seu App de Controle Financeiro Pessoal\nVersão 0.1.0\nDesenvolvido com Python e CustomTkinter")
 
     # --- Callbacks de Menu e Placeholders para abas restantes ---
-    def _setup_calculations_tab(self, tab): label = ctk.CTkLabel(tab, text="Conteúdo de Cálculos Aqui"); label.pack(pady=20, padx=20)
+    def _setup_calculations_tab(self, tab): pass # Aba removida
     def _setup_reports_tab(self, tab): label = ctk.CTkLabel(tab, text="Conteúdo de Relatórios/Insights Aqui"); label.pack(pady=20, padx=20)
     def _criar_novo_usuario(self): print("MainAppFrame: Ação 'Criar Novo Usuário'")
     def _alterar_senha(self): print("MainAppFrame: Ação 'Alterar Senha'")

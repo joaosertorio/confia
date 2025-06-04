@@ -174,14 +174,29 @@ def get_categories_by_type(tipo: str):
         return cursor.fetchall()
     finally: conn.close() if conn else None
 
-def add_category(nome: str, tipo: str, cor: str):
-    conn = connect_db(); cursor = conn.cursor()
+def add_category(nome: str, tipo: str, cor: str, fixa: int = 0): # <<< ADICIONADO fixa=0 AQUI
+    """Adiciona uma nova categoria ao banco de dados."""
+    conn = connect_db()
+    cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO categorias (nome, tipo, cor, fixa) VALUES (?, ?, ?, 0)", (nome, tipo, cor))
-        conn.commit(); return True
-    except sqlite3.IntegrityError: print(f"Categoria '{nome}' já existe."); return False
-    except sqlite3.Error as e: print(f"Erro BD: {e}"); conn.rollback(); return False
-    finally: conn.close() if conn else None
+        # --- MODIFICAÇÃO NA QUERY E NOS PARÂMETROS ---
+        cursor.execute("INSERT INTO categorias (nome, tipo, cor, fixa) VALUES (?, ?, ?, ?)", 
+                       (nome, tipo, cor, fixa)) 
+        # --- FIM DA MODIFICAÇÃO ---
+        conn.commit()
+        print(f"Categoria '{nome}' (Tipo: {tipo}, Cor: {cor}, Fixa: {fixa}) adicionada com sucesso.")
+        return True
+    except sqlite3.IntegrityError:
+        # Este erro ocorre se o nome da categoria já existir (devido à restrição UNIQUE)
+        print(f"Erro: Categoria '{nome}' já existe.")
+        return False
+    except sqlite3.Error as e:
+        print(f"Erro ao adicionar categoria ao banco de dados: {e}")
+        conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
 
 def delete_category(category_id: int):
     conn = connect_db(); cursor = conn.cursor()
